@@ -6,6 +6,9 @@
 // APK (número do run do workflow apk.yml). Se N for maior que o instalado, baixa o APK
 // sozinho, mostrando o progresso, e abre o instalador do Android: a pessoa só toca em
 // "Atualizar". Na primeira vez o Android pede para liberar "instalar apps desta fonte".
+//
+// Teste de 24/11/2026: a 1.0.9 foi instalada à mão e esta versão (1.0.10) existe só para
+// conferir se a 1.0.9 encontra a atualização sozinha.
 import { registerPlugin } from '@capacitor/core';
 import { ehApp, esc } from './util.js';
 
