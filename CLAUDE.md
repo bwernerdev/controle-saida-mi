@@ -36,7 +36,7 @@ Sem `VITE_SUPABASE_URL`/`VITE_SUPABASE_ANON_KEY` no build, o app usa `localStora
 
 ## Configuração no GitHub (repo bwernerdev/controle-saida-mi)
 - Variáveis (Settings > Secrets and variables > Actions > Variables): `SUPABASE_URL`, `SUPABASE_ANON_KEY`. Vazias = build em modo demonstração.
-- Segredos: `ANDROID_KEYSTORE_B64` (base64 de `assinatura/controle-saida-mi.p12`) e `ANDROID_KEYSTORE_PASSWORD` (conteúdo de `assinatura/senha.txt`). Alias da chave: `controle-saida-mi`.
+- Segredos: `ANDROID_KEYSTORE_B64` (base64 de `assinatura/controle-saida-mi.p12`) e `ANDROID_KEYSTORE_PASSWORD` (conteúdo de `assinatura/senha.txt`). Alias da chave: `controle-saida-mi`. Gravar os dois pelo **Bash**, nunca por pipe do PowerShell 5.1 (corrompe o base64): `base64 -w0 assinatura/controle-saida-mi.p12 | gh secret set ANDROID_KEYSTORE_B64 -R bwernerdev/controle-saida-mi` e `gh secret set ANDROID_KEYSTORE_PASSWORD -R bwernerdev/controle-saida-mi < assinatura/senha.txt`. SHA-256 do certificado: `5acc9446d5dc94b64500727311b7deaa81d0058c54ec406580c3f1190f4ed414`.
 - Pages: build type `workflow` (publica `dist/`).
 
 ## Configurar o Supabase (uma vez)
