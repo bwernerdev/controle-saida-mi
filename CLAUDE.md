@@ -28,6 +28,10 @@ Passa pela Edge Function `usuarios` (`supabase/functions/usuarios/index.ts`), po
 
 Status de uma saída: `pendente` → `liberado` (portaria) ou `cancelado` (balança). Ninguém altera a tabela direto: só `insert` (balança, e o gatilho preenche autor e status) e as funções `registrar_saida` e `cancelar_saida`. Mesma placa não pode ter duas pendentes.
 
+## Autoatualização do APK
+`src/atualizador.js` (só roda no app): ao abrir e ao voltar para a frente (no máximo a cada 15 min) lê `api.github.com/repos/bwernerdev/controle-saida-mi/releases/latest`; a tag `v1.0.<N>` dá o versionCode N. Se N for maior que o instalado, baixa o `.apk` da Release com barra de progresso e abre o instalador do Android (a pessoa toca em "Atualizar"). Na primeira vez pede a liberação "Instalar apps desconhecidos" (botão Liberar). Instalar sem nenhum toque não é permitido fora da Play Store/app de sistema.
+O lado nativo é o plugin local `android/app/src/main/java/.../AtualizadorPlugin.java` (registrado em `MainActivity`), com `info`, `abrirPermissao` e `baixarEInstalar` (baixa para o cache e usa o FileProvider do Capacitor); o manifesto pede `REQUEST_INSTALL_PACKAGES`. A tela de login do APK mostra "Versão 1.0.N". APKs até a 1.0.6 não têm o atualizador: instalar a primeira versão com ele à mão. Teste no navegador: `_usarPluginDeTeste()` com um plugin simulado e `window.Capacitor.isNativePlatform = () => true`.
+
 ## Modo demonstração
 Sem `VITE_SUPABASE_URL`/`VITE_SUPABASE_ANON_KEY` no build, o app usa `localStorage` (selo amarelo "demonstração" no topo). Usuários `balanca@demo`, `portaria@demo`, `admin@demo`, qualquer senha; os criados na aba Usuários exigem a senha dada. Serve para testar a interface; dados ficam só naquele navegador.
 

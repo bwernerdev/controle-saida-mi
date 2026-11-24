@@ -156,6 +156,16 @@ td.vazio, li.vazio { text-align: center; color: var(--texto-2); padding: 28px; }
   .ind b { font-size: 24px; }
 }
 
+/* ---------- autoatualização (APK) ---------- */
+.versao { margin: 0; text-align: center; font-size: 12px; color: var(--texto-2); }
+dialog.atualizacao { display: grid; gap: 12px; }
+dialog.atualizacao[open] { display: grid; }
+dialog.atualizacao:not([open]) { display: none; }
+dialog.atualizacao h3 { color: var(--marca); }
+.barra { height: 10px; background: #e6ebf2; border-radius: 999px; overflow: hidden; }
+.barra span { display: block; height: 100%; background: var(--acento); transition: width .2s; }
+.atu-status { font-weight: 600; text-align: center; }
+
 /* ---------- usuários (admin) ---------- */
 select {
   width: 100%; padding: 10px 12px; border: 1px solid var(--borda); border-radius: 8px;

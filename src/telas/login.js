@@ -1,6 +1,7 @@
 // Tela de login (e-mail + senha do Supabase Auth).
 import { api } from '../api.js';
 import { esc } from '../util.js';
+import { versaoInstalada } from '../atualizador.js';
 
 export function telaLogin(raiz, aoEntrar) {
   raiz.innerHTML = `
@@ -14,6 +15,7 @@ export function telaLogin(raiz, aoEntrar) {
         <label>Senha<input name="senha" type="password" ${api.demo ? '' : 'required'} autocomplete="current-password"></label>
         <p class="erro" id="erro-login" hidden></p>
         <button class="btn grande" type="submit">Entrar</button>
+        <p class="versao" id="versao-app" hidden></p>
       </form>
     </div>`;
   const form = raiz.querySelector('#form-login');
@@ -31,4 +33,10 @@ export function telaLogin(raiz, aoEntrar) {
     }
   };
   form.email.focus();
+
+  // No APK, mostra a versão instalada (ajuda a conferir a autoatualização).
+  versaoInstalada().then((v) => {
+    const el = raiz.querySelector('#versao-app');
+    if (v && el) { el.textContent = `Versão ${v.versionName}`; el.hidden = false; }
+  });
 }

@@ -6,6 +6,7 @@ import { telaBalanca } from './telas/balanca.js';
 import { telaPortaria } from './telas/portaria.js';
 import { telaUsuarios } from './telas/usuarios.js';
 import { ehApp, esc } from './util.js';
+import { iniciarAtualizador } from './atualizador.js';
 
 const raiz = document.getElementById('app');
 let desmontar = null;
@@ -96,3 +97,4 @@ function montar(perfil, visao) {
 
 api.aoMudarSessao(() => { /* login/logout em outra aba */ });
 iniciar();
+iniciarAtualizador(); // só faz algo no APK
