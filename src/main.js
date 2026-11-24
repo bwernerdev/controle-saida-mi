@@ -4,6 +4,7 @@ import { api } from './api.js';
 import { telaLogin } from './telas/login.js';
 import { telaBalanca } from './telas/balanca.js';
 import { telaPortaria } from './telas/portaria.js';
+import { telaUsuarios } from './telas/usuarios.js';
 import { ehApp, esc } from './util.js';
 
 const raiz = document.getElementById('app');
@@ -21,7 +22,7 @@ function visaoInicial(papel) {
   if (papel !== 'admin') return papel;
   try {
     const salva = localStorage.getItem('csmi-visao');
-    if (salva === 'balança' || salva === 'portaria') return salva;
+    if (salva === 'balança' || salva === 'portaria' || salva === 'usuarios') return salva;
   } catch { /* sem storage */ }
   return ehApp() ? 'portaria' : 'balança';
 }
@@ -68,6 +69,7 @@ function montar(perfil, visao) {
     ? `<nav class="abas">
          <button data-v="balança" class="${visao === 'balança' ? 'ativa' : ''}">Balança</button>
          <button data-v="portaria" class="${visao === 'portaria' ? 'ativa' : ''}">Portaria</button>
+         <button data-v="usuarios" class="${visao === 'usuarios' ? 'ativa' : ''}">Usuários</button>
        </nav>`
     : '';
   topo.innerHTML = `
@@ -88,7 +90,8 @@ function montar(perfil, visao) {
   const corpo = document.createElement('main');
   raiz.appendChild(corpo);
   document.body.dataset.visao = visao;
-  desmontar = visao === 'portaria' ? telaPortaria(corpo, perfil) : telaBalanca(corpo, perfil);
+  const telas = { portaria: telaPortaria, usuarios: telaUsuarios };
+  desmontar = (telas[visao] || telaBalanca)(corpo, perfil);
 }
 
 api.aoMudarSessao(() => { /* login/logout em outra aba */ });

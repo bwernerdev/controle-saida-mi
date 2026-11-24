@@ -97,23 +97,54 @@ function criarApiSupabase() {
         .subscribe();
       return () => sb.removeChannel(canal);
     },
+    // Gestão de logins (só admin): passa pela Edge Function "usuarios", que guarda a
+    // chave secreta no servidor. Ver supabase/functions/usuarios/index.ts.
+    usuarios: {
+      async listar() { return (await chamarUsuarios({ acao: 'listar' })).usuarios; },
+      async criar(dados) { await chamarUsuarios({ acao: 'criar', ...dados }); },
+      async alterar(dados) { await chamarUsuarios({ acao: 'alterar', ...dados }); },
+      async senha(dados) { await chamarUsuarios({ acao: 'senha', ...dados }); },
+      async excluir(dados) { await chamarUsuarios({ acao: 'excluir', ...dados }); },
+    },
   };
+
+  async function chamarUsuarios(corpo) {
+    const { data, error } = await sb.functions.invoke('usuarios', { body: corpo });
+    if (!error) return data;
+    const status = error.context?.status;
+    let msg = '';
+    try { msg = (await error.context.json())?.erro || ''; } catch { /* corpo não é JSON */ }
+    if (!msg && status === 404) {
+      msg = 'A função "usuarios" ainda não foi publicada no Supabase (Edge Functions).';
+    }
+    if (!msg && error.name === 'FunctionsFetchError') {
+      msg = 'Não foi possível falar com a função "usuarios". Confira a conexão e se ela foi publicada.';
+    }
+    throw new Error(msg || error.message);
+  }
 }
 
 // ---------------------------------------------------------- Demonstração
 function criarApiDemo() {
   const CHAVE = 'csmi-demo-v1';
-  const USUARIOS = {
-    'balanca@demo': { nome: 'Balança (demo)', papel: 'balança' },
-    'portaria@demo': { nome: 'Portaria (demo)', papel: 'portaria' },
-    'admin@demo': { nome: 'Admin (demo)', papel: 'admin' },
-  };
+  // Usuários de teste fixos (qualquer senha). Os criados pela aba Usuários exigem a senha dada.
+  const FIXOS = [
+    { id: 'demo-balanca', email: 'balanca@demo', nome: 'Balança (demo)', papel: 'balança' },
+    { id: 'demo-portaria', email: 'portaria@demo', nome: 'Portaria (demo)', papel: 'portaria' },
+    { id: 'demo-admin', email: 'admin@demo', nome: 'Admin (demo)', papel: 'admin' },
+  ];
   const ouvintes = new Set();
   const ouvintesSessao = new Set();
 
+  const novo = () => ({ seq: 0, saidas: [], email: null });
   const ler = () => {
-    try { return JSON.parse(localStorage.getItem(CHAVE)) || { seq: 0, saidas: [], email: null }; }
-    catch { return { seq: 0, saidas: [], email: null }; }
+    let db;
+    try { db = JSON.parse(localStorage.getItem(CHAVE)) || novo(); } catch { db = novo(); }
+    if (!Array.isArray(db.usuarios)) {
+      const agora = new Date().toISOString();
+      db.usuarios = FIXOS.map((u) => ({ ...u, senha: null, criado_em: agora, ultimo_acesso: null }));
+    }
+    return db;
   };
   const gravar = (db) => {
     try { localStorage.setItem(CHAVE, JSON.stringify(db)); } catch { /* modo privado */ }
@@ -122,7 +153,23 @@ function criarApiDemo() {
   // Outra aba mexeu nos dados: avisa as telas desta aba também.
   window.addEventListener('storage', (e) => { if (e.key === CHAVE) ouvintes.forEach((f) => f()); });
 
-  const usuario = () => USUARIOS[ler().email] || null;
+  const usuario = () => {
+    const db = ler();
+    const u = db.usuarios.find((x) => x.email === db.email);
+    return u && u.papel ? { nome: u.nome, papel: u.papel } : null;
+  };
+  const exigirAdmin = () => {
+    const db = ler();
+    const u = db.usuarios.find((x) => x.email === db.email);
+    if (!u) throw new Error('Sessão expirada. Entre de novo.');
+    if (u.papel !== 'admin') throw new Error('Só o administrador pode gerenciar usuários.');
+    return { db, eu: u };
+  };
+  const validarSenha = (s) => {
+    if (typeof s !== 'string' || s.length < 8) throw new Error('A senha precisa ter pelo menos 8 caracteres.');
+    return s;
+  };
+  const PAPEIS = ['balança', 'portaria', 'admin'];
   const exigir = (...papeis) => {
     const u = usuario();
     if (!u) throw new Error('Sessão expirada. Entre de novo.');
@@ -133,10 +180,14 @@ function criarApiDemo() {
   return {
     demo: true,
     async sessao() { const e = ler().email; return e ? { email: e } : null; },
-    async entrar(email) {
+    async entrar(email, senha) {
       const e = email.trim().toLowerCase();
-      if (!USUARIOS[e]) throw new Error('No modo demonstração use balanca@demo, portaria@demo ou admin@demo.');
-      const db = ler(); db.email = e; gravar(db);
+      const db = ler();
+      const u = db.usuarios.find((x) => x.email === e);
+      if (!u) throw new Error('No modo demonstração use balanca@demo, portaria@demo ou admin@demo.');
+      if (u.senha && u.senha !== senha) throw new Error('E-mail ou senha incorretos.');
+      u.ultimo_acesso = new Date().toISOString();
+      db.email = e; gravar(db);
       ouvintesSessao.forEach((f) => f());
     },
     async sair() { const db = ler(); db.email = null; gravar(db); ouvintesSessao.forEach((f) => f()); },
@@ -196,6 +247,51 @@ function criarApiDemo() {
       return s;
     },
     assinar(cb) { ouvintes.add(cb); return () => ouvintes.delete(cb); },
+    usuarios: {
+      async listar() {
+        const { db, eu } = exigirAdmin();
+        return db.usuarios
+          .map(({ senha, ...u }) => ({ ...u, eu: u.id === eu.id }))
+          .sort((a, b) => (a.nome || a.email).localeCompare(b.nome || b.email, 'pt-BR'));
+      },
+      async criar({ email, nome, papel, senha }) {
+        const { db } = exigirAdmin();
+        const e = String(email || '').trim().toLowerCase();
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) throw new Error('E-mail inválido.');
+        if (!String(nome || '').trim()) throw new Error('Informe o nome.');
+        if (!PAPEIS.includes(papel)) throw new Error('Papel inválido.');
+        validarSenha(senha);
+        if (db.usuarios.some((u) => u.email === e)) throw new Error('Já existe um usuário com este e-mail.');
+        db.usuarios.push({
+          id: `demo-${Date.now()}`, email: e, nome: nome.trim(), papel, senha,
+          criado_em: new Date().toISOString(), ultimo_acesso: null,
+        });
+        gravar(db);
+      },
+      async alterar({ id, nome, papel }) {
+        const { db, eu } = exigirAdmin();
+        const u = db.usuarios.find((x) => x.id === id);
+        if (!u) throw new Error('Usuário não encontrado.');
+        if (!String(nome || '').trim()) throw new Error('Informe o nome.');
+        if (papel !== null && !PAPEIS.includes(papel)) throw new Error('Papel inválido.');
+        if (id === eu.id && papel !== 'admin') throw new Error('Você não pode tirar o seu próprio acesso de administrador.');
+        u.nome = nome.trim(); u.papel = papel;
+        gravar(db);
+      },
+      async senha({ id, senha }) {
+        const { db } = exigirAdmin();
+        const u = db.usuarios.find((x) => x.id === id);
+        if (!u) throw new Error('Usuário não encontrado.');
+        u.senha = validarSenha(senha);
+        gravar(db);
+      },
+      async excluir({ id }) {
+        const { db, eu } = exigirAdmin();
+        if (id === eu.id) throw new Error('Você não pode excluir o seu próprio usuário.');
+        db.usuarios = db.usuarios.filter((x) => x.id !== id);
+        gravar(db);
+      },
+    },
   };
 }
 

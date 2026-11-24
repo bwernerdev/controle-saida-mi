@@ -114,7 +114,7 @@ dialog form { display: grid; gap: 14px; }
 .usuario { margin-left: auto; display: flex; align-items: center; gap: 8px; font-size: 13px; opacity: .95; }
 
 /* ---------- balança (PC) ---------- */
-main.balanca {
+main.balanca, main.usuarios {
   display: grid; grid-template-columns: 340px 1fr; gap: 20px; align-items: start;
   padding: 20px; max-width: 1500px; margin: 0 auto;
 }
@@ -150,11 +150,25 @@ td.obs { max-width: 260px; color: var(--texto-2); }
 td.vazio, li.vazio { text-align: center; color: var(--texto-2); padding: 28px; }
 
 @media (max-width: 900px) {
-  main.balanca { grid-template-columns: 1fr; padding: 16px; }
+  main.balanca, main.usuarios { grid-template-columns: 1fr; padding: 16px; }
   .cadastro { position: static; }
   .indicadores { gap: 8px; }
   .ind b { font-size: 24px; }
 }
+
+/* ---------- usuários (admin) ---------- */
+select {
+  width: 100%; padding: 10px 12px; border: 1px solid var(--borda); border-radius: 8px;
+  background: #fff; font: inherit; font-weight: 400; font-size: 15px; color: var(--texto);
+}
+select:focus { outline: 2px solid var(--acento); outline-offset: -1px; }
+.campo-com-botao { display: flex; gap: 8px; }
+.campo-com-botao input { font-family: var(--mono); }
+.campo-com-botao .btn { flex: none; }
+.titulo-lista { font-size: 16px; color: var(--marca); display: flex; align-items: center; gap: 8px; }
+.papel { font-weight: 600; }
+td.acoes-linha { white-space: nowrap; text-align: right; }
+dialog.cartao p { color: var(--texto-2); margin: 0; }
 
 /* ---------- portaria (celular) ---------- */
 body[data-visao="portaria"] .topo { padding: 10px 16px; padding-top: max(10px, env(safe-area-inset-top)); flex-wrap: wrap; gap: 8px; }
