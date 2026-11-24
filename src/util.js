@@ -68,6 +68,34 @@ export function aviso(msg, tipo = 'ok') {
   timerAviso = setTimeout(() => el.classList.remove('visivel'), tipo === 'erro' ? 5000 : 2800);
 }
 
+/** Erro de rede: a sessão/os dados continuam salvos, só não deu para falar com o servidor. */
+export class SemConexao extends Error {}
+
+/** O erro veio da falta de rede (e não de uma regra do servidor)? */
+export function ehErroDeRede(e) {
+  if (e instanceof SemConexao) return true;
+  return /Sem conexão|Failed to fetch|NetworkError|Load failed|Network request failed|tempo esgotado/i
+    .test(e?.message || String(e || ''));
+}
+
+/** Confere placa e lacre de um cadastro novo (as mesmas regras do banco). */
+export function validarNovo({ placa, lacre }) {
+  const p = normalizarPlaca(placa);
+  if (!placaValida(p)) throw new Error('Placa inválida. Use ABC1234 ou ABC1D23.');
+  const l = String(lacre || '').trim();
+  if (!l) throw new Error('Informe o lacre.');
+  if (l.length > 40) throw new Error('Lacre muito longo (máximo 40 caracteres).');
+  return { placa: p, lacre: l };
+}
+
+/** Motivo do cancelamento: obrigatório, de 3 a 200 caracteres (mesma regra do schema.sql). */
+export function validarMotivo(motivo) {
+  const m = String(motivo || '').trim();
+  if (m.length < 3) throw new Error('Informe o motivo do cancelamento (pelo menos 3 caracteres).');
+  if (m.length > 200) throw new Error('Motivo muito longo (máximo 200 caracteres).');
+  return m;
+}
+
 /** Roda no app Android (Capacitor) e não no navegador. */
 export function ehApp() {
   return !!window.Capacitor?.isNativePlatform?.();

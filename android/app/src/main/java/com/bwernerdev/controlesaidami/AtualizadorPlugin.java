@@ -27,6 +27,7 @@ import java.net.URL;
  *
  * O JavaScript (src/atualizador.js) descobre a versão nova na Release do GitHub e chama:
  *  - info(): versionCode/versionName instalados e se o app já pode instalar APKs;
+ *  - ultimaVersao({ repo }): tag da última Release (v1.0.N), sem a API do GitHub;
  *  - abrirPermissao(): abre a tela do Android "Instalar apps desconhecidos" deste app;
  *  - baixarEInstalar({ url }): baixa o APK para o cache (evento "progresso" com pct) e
  *    abre o instalador do Android. A pessoa só confirma em "Atualizar".
@@ -58,6 +59,46 @@ public class AtualizadorPlugin extends Plugin {
     private boolean podeInstalar() {
         return Build.VERSION.SDK_INT < 26
                 || getContext().getPackageManager().canRequestPackageInstalls();
+    }
+
+    /**
+     * Tag da última Release, lida do redirecionamento de github.com/.../releases/latest
+     * (302 para .../releases/tag/v1.0.N). Não usa a API do GitHub, que aceita só 60
+     * consultas por hora por endereço de internet (no 4G, muitos aparelhos dividem o mesmo).
+     */
+    @PluginMethod
+    public void ultimaVersao(PluginCall call) {
+        final String repo = call.getString("repo");
+        if (repo == null || !repo.matches("[A-Za-z0-9._-]+/[A-Za-z0-9._-]+")) {
+            call.reject("Repositório inválido.");
+            return;
+        }
+        new Thread(() -> {
+            HttpURLConnection conexao = null;
+            try {
+                conexao = (HttpURLConnection) new URL("https://github.com/" + repo + "/releases/latest").openConnection();
+                conexao.setInstanceFollowRedirects(false);
+                conexao.setRequestMethod("HEAD");
+                conexao.setUseCaches(false);
+                conexao.setConnectTimeout(15000);
+                conexao.setReadTimeout(15000);
+                int status = conexao.getResponseCode();
+                String destino = conexao.getHeaderField("Location");
+                if (status < 300 || status >= 400 || destino == null) {
+                    throw new IOException("GitHub respondeu " + status);
+                }
+                java.util.regex.Matcher m = java.util.regex.Pattern
+                        .compile("/releases/tag/(v\\d+\\.\\d+\\.\\d+)$").matcher(destino);
+                if (!m.find()) throw new IOException("endereço inesperado: " + destino);
+                JSObject r = new JSObject();
+                r.put("tag", m.group(1));
+                call.resolve(r);
+            } catch (Exception e) {
+                call.reject("Não foi possível consultar a versão nova: " + e.getMessage());
+            } finally {
+                if (conexao != null) conexao.disconnect();
+            }
+        }).start();
     }
 
     @PluginMethod

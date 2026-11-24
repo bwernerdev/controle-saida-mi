@@ -1,7 +1,7 @@
 // Tela da balança (PC): cadastra PLACA + LACRE e acompanha as saídas.
 import { api } from '../api.js';
 import {
-  aviso, dataHora, esc, formatarPlaca, hojeISO, inicioDoDia, normalizarPlaca, placaValida,
+  aviso, dataHora, esc, formatarPlaca, hojeISO, inicioDoDia, normalizarPlaca, placaValida, validarMotivo,
 } from '../util.js';
 
 const ROTULO = { pendente: 'Aguardando saída', liberado: 'Saiu', cancelado: 'Cancelado' };
@@ -60,9 +60,11 @@ export function telaBalanca(corpo) {
     <dialog id="dlg-cancelar" class="cartao">
       <form method="dialog">
         <h3>Cancelar saída <span id="canc-placa"></span>?</h3>
-        <label>Motivo <small>(opcional)</small><input name="motivo" maxlength="200"></label>
+        <label>Motivo do cancelamento
+          <input name="motivo" maxlength="200" placeholder="Ex.: veículo voltou, lacre trocado…"></label>
+        <p class="erro" id="erro-canc" hidden></p>
         <div class="acoes">
-          <button class="btn sec" value="nao">Voltar</button>
+          <button class="btn sec" value="nao" formnovalidate>Voltar</button>
           <button class="btn perigo" value="sim">Cancelar saída</button>
         </div>
       </form>
@@ -90,7 +92,9 @@ export function telaBalanca(corpo) {
       const novo = await api.criar({
         placa: form.placa.value, lacre: form.lacre.value, observacao: form.observacao.value,
       });
-      aviso(`Saída de ${formatarPlaca(novo.placa)} cadastrada.`);
+      aviso(novo._naFila
+        ? `Sem internet: ${formatarPlaca(novo.placa)} ficou guardada e será enviada quando a rede voltar.`
+        : `Saída de ${formatarPlaca(novo.placa)} cadastrada.`);
       form.reset();
       form.placa.focus();
       carregar();
@@ -159,7 +163,8 @@ export function telaBalanca(corpo) {
         <td class="mono">${esc(s.lacre)}</td>
         <td class="obs">${esc(s.observacao || '')}</td>
         <td>${dataHora(s.criado_em)}<br><small>${esc(s.criado_por_nome || '')}</small></td>
-        <td><span class="status ${s.status}">${ROTULO[s.status]}</span></td>
+        <td><span class="status ${s.status}">${ROTULO[s.status]}</span>${
+          s._local ? '<br><small class="nao-enviado" title="Feito sem internet; será enviado quando a rede voltar">não enviado</small>' : ''}</td>
         <td>${fim}</td>
         <td>${s.status === 'pendente'
           ? `<button class="btn-link perigo" data-cancelar="${s.id}">Cancelar</button>` : ''}</td>
@@ -173,12 +178,26 @@ export function telaBalanca(corpo) {
   function pedirCancelamento(s) {
     const dlg = $('#dlg-cancelar');
     $('#canc-placa').textContent = formatarPlaca(s.placa);
-    dlg.querySelector('[name=motivo]').value = '';
+    const formCanc = dlg.querySelector('form');
+    const erroCanc = $('#erro-canc');
+    formCanc.motivo.value = '';
+    erroCanc.hidden = true;
+    // Motivo obrigatório: sem ele, o diálogo não fecha.
+    formCanc.onsubmit = (ev) => {
+      if (ev.submitter?.value !== 'sim') return;
+      try { validarMotivo(formCanc.motivo.value); } catch (e) {
+        ev.preventDefault();
+        erroCanc.textContent = e.message; erroCanc.hidden = false;
+        formCanc.motivo.focus();
+      }
+    };
     dlg.onclose = async () => {
       if (dlg.returnValue !== 'sim') return;
       try {
-        await api.cancelar(s.id, dlg.querySelector('[name=motivo]').value.trim());
-        aviso(`Saída de ${formatarPlaca(s.placa)} cancelada.`);
+        const r = await api.cancelar(s.id, dlg.querySelector('[name=motivo]').value.trim());
+        aviso(r?._naFila
+          ? `Sem internet: cancelamento de ${formatarPlaca(s.placa)} guardado; será enviado quando a rede voltar.`
+          : `Saída de ${formatarPlaca(s.placa)} cancelada.`);
         carregar();
       } catch (e) { aviso(e.message, 'erro'); }
     };

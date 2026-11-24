@@ -68,6 +68,7 @@ export function telaPortaria(corpo) {
       ? p.map((r) => `<li><button class="card" data-id="${r.id}">
           <span class="placa">${esc(formatarPlaca(r.placa))}</span>
           <span class="info">Cadastrado ${dataHora(r.criado_em)}${
+            r._local ? ' · <span class="nao-enviado">não enviado</span>' : ''}${
             r.observacao ? `<br><span class="obs">${esc(r.observacao)}</span>` : ''}</span>
           <span class="seta" aria-hidden="true">›</span>
         </button></li>`).join('')
@@ -76,7 +77,8 @@ export function telaPortaria(corpo) {
     $('#saidos').innerHTML = s.length
       ? s.map((r) => `<li class="card saiu">
           <span class="placa">${esc(formatarPlaca(r.placa))}</span>
-          <span class="info">Saiu ${dataHora(r.saida_em)} · ${esc(r.saida_por_nome || '')}</span>
+          <span class="info">Saiu ${dataHora(r.saida_em)} · ${esc(r.saida_por_nome || '')}${
+            r._local ? ' · <span class="nao-enviado">não enviado</span>' : ''}</span>
         </li>`).join('')
       : '<li class="vazio">Nenhuma saída hoje.</li>';
 
@@ -105,9 +107,11 @@ export function telaPortaria(corpo) {
     const botao = form.querySelector('[type=submit]');
     botao.disabled = true; erro.hidden = true;
     try {
-      await api.registrarSaida(atual.id, form.lacre.value);
+      const r = await api.registrarSaida(atual.id, form.lacre.value);
       dlg.close();
-      aviso(`Saída de ${formatarPlaca(atual.placa)} registrada.`);
+      aviso(r?._naFila
+        ? `Sem internet: saída de ${formatarPlaca(atual.placa)} registrada aqui; será enviada quando a rede voltar.`
+        : `Saída de ${formatarPlaca(atual.placa)} registrada.`);
       $('#busca').value = '';
       carregar();
     } catch (e) {
@@ -123,7 +127,10 @@ export function telaPortaria(corpo) {
     if ($('#busca').value !== v) $('#busca').value = v;
     desenhar();
   };
-  $('#atualizar').onclick = () => { carregar(); aviso('Lista atualizada.'); };
+  $('#atualizar').onclick = async () => {
+    await carregar();
+    aviso(api.estadoEnvio().online ? 'Lista atualizada.' : 'Sem internet: mostrando os dados salvos.');
+  };
 
   // Atualiza sozinho (Realtime), a cada 30 s, e quando o app volta para a frente.
   let espera;

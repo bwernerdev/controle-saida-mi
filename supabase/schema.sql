@@ -44,6 +44,11 @@ create table if not exists public.saidas (
   motivo_cancelamento text
 );
 
+-- Modo offline (24/11/2026): o app gera um id no aparelho para cada cadastro (reenviar
+-- depois de uma falha de rede não duplica) e manda a hora real em que tudo aconteceu.
+alter table public.saidas add column if not exists id_cliente uuid;
+create unique index if not exists saidas_id_cliente on public.saidas (id_cliente) where id_cliente is not null;
+
 -- Mesma placa não pode ter duas saídas pendentes ao mesmo tempo.
 create unique index if not exists saidas_placa_pendente on public.saidas (placa) where status = 'pendente';
 create index if not exists saidas_criado_em on public.saidas (criado_em desc);
@@ -66,7 +71,23 @@ returns text language sql immutable as $$
   select upper(regexp_replace(coalesce(t, ''), '\s+', '', 'g'))
 $$;
 
+-- Hora que veio do aparelho (operação feita sem rede), limitada ao intervalo aceitável:
+-- de 7 dias atrás até agora (até 5 min no futuro vira "agora": relógio adiantado).
+-- Fora disso, ou sem hora, vale a hora do servidor. p_minimo: não antes desta hora.
+create or replace function public.hora_do_aparelho(p_quando timestamptz, p_minimo timestamptz default null)
+returns timestamptz language sql stable as $$
+  select greatest(
+    case
+      when p_quando is null
+        or p_quando > now() + interval '5 minutes'
+        or p_quando < now() - interval '7 days' then now()
+      else least(p_quando, now())
+    end,
+    coalesce(p_minimo, '-infinity'::timestamptz))
+$$;
+
 -- No cadastro, quem grava é o servidor: autor, status e campos de saída não vêm do app.
+-- criado_em vem do app só no envio de um cadastro feito sem rede (limitado acima).
 create or replace function public.saidas_antes_de_inserir()
 returns trigger language plpgsql security definer set search_path = public as $$
 begin
@@ -74,7 +95,7 @@ begin
   new.lacre := btrim(new.lacre);
   new.observacao := nullif(btrim(coalesce(new.observacao, '')), '');
   new.status := 'pendente';
-  new.criado_em := now();
+  new.criado_em := public.hora_do_aparelho(new.criado_em);
   new.criado_por := auth.uid();
   new.criado_por_nome := public.meu_nome();
   new.saida_em := null; new.saida_por := null; new.saida_por_nome := null;
@@ -88,7 +109,11 @@ create trigger saidas_antes_de_inserir before insert on public.saidas
   for each row execute function public.saidas_antes_de_inserir();
 
 -- Portaria registra a saída. Falha se o lacre digitado não for o cadastrado.
-create or replace function public.registrar_saida(p_id bigint, p_lacre text)
+-- p_quando: hora real da saída feita sem rede (opcional). Reenviar a mesma saída (mesmo
+-- login) devolve o registro em vez de dar erro.
+-- A versão antiga (2 parâmetros) sai: com as duas, a chamada sem p_quando ficaria ambígua.
+drop function if exists public.registrar_saida(bigint, text);
+create or replace function public.registrar_saida(p_id bigint, p_lacre text, p_quando timestamptz default null)
 returns public.saidas language plpgsql security definer set search_path = public as $$
 declare
   r public.saidas;
@@ -100,6 +125,9 @@ begin
   if not found then
     raise exception 'Registro não encontrado.';
   end if;
+  if r.status = 'liberado' and r.saida_por = auth.uid() then
+    return r;
+  end if;
   if r.status <> 'pendente' then
     raise exception 'Este veículo não está mais aguardando saída.';
   end if;
@@ -107,14 +135,16 @@ begin
     raise exception 'Lacre não confere. Confira o lacre ou chame a balança.';
   end if;
   update public.saidas
-     set status = 'liberado', saida_em = now(), saida_por = auth.uid(), saida_por_nome = public.meu_nome()
+     set status = 'liberado', saida_em = public.hora_do_aparelho(p_quando, r.criado_em),
+         saida_por = auth.uid(), saida_por_nome = public.meu_nome()
    where id = p_id
   returning * into r;
   return r;
 end $$;
 
--- Balança cancela uma saída que ainda não aconteceu.
-create or replace function public.cancelar_saida(p_id bigint, p_motivo text default null)
+-- Balança cancela uma saída que ainda não aconteceu. p_quando e reenvio: como acima.
+drop function if exists public.cancelar_saida(bigint, text);
+create or replace function public.cancelar_saida(p_id bigint, p_motivo text default null, p_quando timestamptz default null)
 returns public.saidas language plpgsql security definer set search_path = public as $$
 declare
   r public.saidas;
@@ -126,11 +156,22 @@ begin
   if not found then
     raise exception 'Registro não encontrado.';
   end if;
+  if r.status = 'cancelado' and r.cancelado_por = auth.uid() then
+    return r;
+  end if;
   if r.status <> 'pendente' then
     raise exception 'Só dá para cancelar o que ainda aguarda saída.';
   end if;
+  -- Motivo obrigatório (24/11/2026), mesma regra do app (util.js, validarMotivo).
+  if length(btrim(coalesce(p_motivo, ''))) < 3 then
+    raise exception 'Informe o motivo do cancelamento (pelo menos 3 caracteres).';
+  end if;
+  if length(btrim(p_motivo)) > 200 then
+    raise exception 'Motivo muito longo (máximo 200 caracteres).';
+  end if;
   update public.saidas
-     set status = 'cancelado', cancelado_em = now(), cancelado_por = auth.uid(),
+     set status = 'cancelado', cancelado_em = public.hora_do_aparelho(p_quando, r.criado_em),
+         cancelado_por = auth.uid(),
          cancelado_por_nome = public.meu_nome(), motivo_cancelamento = nullif(btrim(coalesce(p_motivo, '')), '')
    where id = p_id
   returning * into r;
@@ -169,13 +210,15 @@ grant usage on schema public to service_role;
 grant select, insert, update, delete on public.perfis to service_role;
 grant select on public.saidas to service_role;
 
-revoke execute on function public.registrar_saida(bigint, text) from public, anon;
-revoke execute on function public.cancelar_saida(bigint, text) from public, anon;
+revoke execute on function public.registrar_saida(bigint, text, timestamptz) from public, anon;
+revoke execute on function public.cancelar_saida(bigint, text, timestamptz) from public, anon;
+revoke execute on function public.hora_do_aparelho(timestamptz, timestamptz) from public, anon;
 revoke execute on function public.meu_papel() from public, anon;
 revoke execute on function public.meu_nome() from public, anon;
 revoke execute on function public.saidas_antes_de_inserir() from public, anon;
-grant execute on function public.registrar_saida(bigint, text) to authenticated;
-grant execute on function public.cancelar_saida(bigint, text) to authenticated;
+grant execute on function public.registrar_saida(bigint, text, timestamptz) to authenticated;
+grant execute on function public.cancelar_saida(bigint, text, timestamptz) to authenticated;
+grant execute on function public.hora_do_aparelho(timestamptz, timestamptz) to authenticated;
 grant execute on function public.meu_papel() to authenticated;
 grant execute on function public.meu_nome() to authenticated;
 grant execute on function public.normalizar_lacre(text) to authenticated;

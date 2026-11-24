@@ -15,4 +15,5 @@ Detalhes, configuração e comandos: [CLAUDE.md](CLAUDE.md).
 | `vite.config.js` | Build com caminho relativo (serve Pages e APK), porta 5190 |
 | `capacitor.config.json` | Nome e id do app Android (`com.bwernerdev.controlesaidami`) |
 | `.env.example` | Modelo do `.env` com URL e chave do Supabase |
+| `.env.demo` | Usado por `npm run dev:demo`: esvazia as variáveis do Supabase (modo demonstração local, porta 5191) |
 | `CLAUDE.md` | Mapa do projeto, regras e passo a passo de configuração |

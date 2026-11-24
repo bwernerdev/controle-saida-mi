@@ -166,6 +166,26 @@ dialog.atualizacao h3 { color: var(--marca); }
 .barra span { display: block; height: 100%; background: var(--acento); transition: width .2s; }
 .atu-status { font-weight: 600; text-align: center; }
 
+.versao-topo { font-size: 12px; opacity: .8; }
+
+/* ---------- modo offline ---------- */
+.faixa-rede {
+  display: grid; gap: 4px; padding: 8px 20px; font-size: 14px; text-align: center;
+  background: var(--pend-fundo); color: #5c3700; border-bottom: 1px solid #f0d9a8;
+}
+.faixa-rede[hidden] { display: none; }
+.faixa-rede.offline { background: #2b3445; color: #fff; border-bottom-color: #1c2331; }
+.faixa-rede.enviando { background: #e5efff; color: #123d7a; border-bottom-color: #c6d9f7; }
+.faixa-rede .recusa { color: var(--perigo); font-weight: 600; }
+.faixa-rede.offline .recusa { color: #ffb4b4; }
+.nao-enviado { color: var(--pend); font-weight: 700; font-size: 12px; }
+dialog.recusas { display: grid; gap: 12px; width: min(520px, calc(100vw - 32px)); }
+dialog.recusas:not([open]) { display: none; }
+dialog.recusas h3 { color: var(--perigo); }
+dialog.recusas ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; max-height: 55vh; overflow: auto; }
+dialog.recusas li { display: grid; gap: 2px; padding: 10px 12px; border: 1px solid var(--borda); border-radius: 8px; }
+dialog.recusas li .btn-link { justify-self: start; padding-left: 0; }
+
 /* ---------- usuários (admin) ---------- */
 select {
   width: 100%; padding: 10px 12px; border: 1px solid var(--borda); border-radius: 8px;

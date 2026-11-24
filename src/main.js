@@ -5,8 +5,8 @@ import { telaLogin } from './telas/login.js';
 import { telaBalanca } from './telas/balanca.js';
 import { telaPortaria } from './telas/portaria.js';
 import { telaUsuarios } from './telas/usuarios.js';
-import { ehApp, esc } from './util.js';
-import { iniciarAtualizador } from './atualizador.js';
+import { dataHora, ehApp, esc } from './util.js';
+import { iniciarAtualizador, verificarAgora, versaoInstalada } from './atualizador.js';
 
 const raiz = document.getElementById('app');
 let desmontar = null;
@@ -48,6 +48,9 @@ function telaSemConexao() {
 
 /** Botão Sair: encerra a sessão só neste aparelho e volta ao login. */
 async function sair() {
+  const { naFila } = api.estadoEnvio();
+  if (naFila && !window.confirm(`${naFila === 1 ? 'Há 1 registro feito sem internet que ainda não foi enviado'
+    : `Há ${naFila} registros feitos sem internet que ainda não foram enviados`}. Se sair agora, eles serão perdidos. Sair mesmo assim?`)) return;
   saidaPeloBotao = true; // o evento SIGNED_OUT que vem junto não precisa reiniciar
   await api.sair();
   iniciar();
@@ -111,9 +114,18 @@ function montar(perfil, visao) {
       ${api.demo ? '<span class="selo-demo" title="Dados só neste navegador">demonstração</span>' : ''}</div>
     ${abas}
     <div class="usuario"><span>${esc(perfil.nome)} · ${NOME_PAPEL[perfil.papel] || perfil.papel}</span>
+      <button class="btn-link versao-topo" id="versao" hidden title="Verificar atualização"></button>
       <button class="btn-link" id="sair">Sair</button></div>`;
   raiz.appendChild(topo);
   topo.querySelector('#sair').onclick = sair;
+  // No APK: versão instalada; tocar confere na hora se há atualização.
+  versaoInstalada().then((v) => {
+    const b = topo.querySelector('#versao');
+    if (!v || !b) return;
+    b.textContent = `v${v.versionName}`;
+    b.hidden = false;
+    b.onclick = verificarAgora;
+  });
   topo.querySelectorAll('.abas button').forEach((b) => {
     b.onclick = () => {
       try { localStorage.setItem('csmi-visao', b.dataset.v); } catch { /* ok */ }
@@ -121,11 +133,83 @@ function montar(perfil, visao) {
     };
   });
 
+  const faixa = document.createElement('div');
+  faixa.className = 'faixa-rede';
+  faixa.hidden = true;
+  raiz.appendChild(faixa);
+  const pararFaixa = api.aoMudarEstadoEnvio((e) => desenharFaixa(faixa, e));
+
   const corpo = document.createElement('main');
   raiz.appendChild(corpo);
   document.body.dataset.visao = visao;
   const telas = { portaria: telaPortaria, usuarios: telaUsuarios };
-  desmontar = (telas[visao] || telaBalanca)(corpo, perfil);
+  const pararTela = (telas[visao] || telaBalanca)(corpo, perfil);
+  desmontar = () => { pararFaixa(); if (pararTela) pararTela(); };
+}
+
+const contar = (n, um, varios) => `${n} ${n === 1 ? um : varios}`;
+
+/** Faixa abaixo do topo: sem internet, fila de envio e registros recusados pelo servidor. */
+function desenharFaixa(el, e) {
+  const linhas = [];
+  let tipo = '';
+  const fila = contar(e.naFila, 'registro aguardando envio', 'registros aguardando envio');
+  if (!e.online) {
+    tipo = 'offline';
+    linhas.push(`<span><b>Sem internet.</b> ${e.atualizadoEm ? `Mostrando os dados de ${dataHora(e.atualizadoEm)}. ` : ''}${
+      e.naFila ? `${fila}.` : 'O que for registrado será enviado quando a rede voltar.'}</span>`);
+  } else if (e.enviando) {
+    tipo = 'enviando';
+    linhas.push(`<span>Enviando ${contar(e.naFila, 'registro feito sem internet', 'registros feitos sem internet')}…</span>`);
+  } else if (e.naFila) {
+    tipo = 'enviando';
+    linhas.push(`<span>${fila}. <button class="btn-link" data-acao="enviar">Enviar agora</button></span>`);
+  }
+  if (e.rejeitadas) {
+    tipo = tipo || 'recusa';
+    linhas.push(`<span class="recusa">${contar(e.rejeitadas, 'registro feito sem internet não foi aceito',
+      'registros feitos sem internet não foram aceitos')} pelo servidor.
+      <button class="btn-link" data-acao="ver">Ver</button></span>`);
+  }
+  el.hidden = !linhas.length;
+  el.className = `faixa-rede ${tipo}`;
+  el.innerHTML = linhas.join('');
+  const enviar = el.querySelector('[data-acao=enviar]');
+  if (enviar) enviar.onclick = () => api.sincronizar();
+  const ver = el.querySelector('[data-acao=ver]');
+  if (ver) ver.onclick = mostrarRecusas;
+}
+
+const DESCRICAO = { criar: 'Cadastro', saida: 'Saída', cancelar: 'Cancelamento' };
+
+/** Lista do que o servidor recusou (ex.: saída de um veículo que a balança cancelou). */
+function mostrarRecusas() {
+  let dlg = document.getElementById('dlg-recusas');
+  if (!dlg) {
+    dlg = document.createElement('dialog');
+    dlg.id = 'dlg-recusas';
+    dlg.className = 'cartao recusas';
+    document.body.appendChild(dlg);
+  }
+  const desenhar = () => {
+    const lista = api.rejeitadas();
+    if (!lista.length) { dlg.close(); return; }
+    dlg.innerHTML = `
+      <h3>Não aceitos pelo servidor</h3>
+      <p>Foram registrados sem internet e recusados quando a rede voltou. Confira com a balança/portaria.</p>
+      <ul>${lista.map((o) => `<li>
+        <b>${DESCRICAO[o.tipo] || o.tipo}${o.placa ? ` de <span class="placa">${esc(o.placa)}</span>` : ''}</b>
+        <small>feito ${dataHora(o.quando)}</small>
+        <span class="erro">${esc(o.erro)}</span>
+        <button class="btn-link" data-dispensar="${esc(o.id)}">Dispensar</button></li>`).join('')}</ul>
+      <div class="acoes"><button class="btn sec" id="recusas-fechar">Fechar</button></div>`;
+    dlg.querySelector('#recusas-fechar').onclick = () => dlg.close();
+    dlg.querySelectorAll('[data-dispensar]').forEach((b) => {
+      b.onclick = async () => { await api.dispensarRejeitada(b.dataset.dispensar); desenhar(); };
+    });
+  };
+  desenhar();
+  if (api.rejeitadas().length && !dlg.open) dlg.showModal();
 }
 
 // Sessão encerrada fora do botão Sair (revogada no servidor, usuário excluído): volta ao login.

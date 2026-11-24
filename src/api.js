@@ -5,10 +5,12 @@
 import { createClient, isAuthRetryableFetchError } from '@supabase/supabase-js';
 import { Preferences } from '@capacitor/preferences';
 import { SUPABASE_URL, SUPABASE_ANON_KEY, MODO_DEMO } from './config.js';
-import { ehApp, normalizarLacre, normalizarPlaca, placaValida } from './util.js';
+import {
+  SemConexao, ehApp, ehErroDeRede, normalizarLacre, validarMotivo, validarNovo,
+} from './util.js';
+import { criarCamadaOffline } from './offline.js';
 
-/** Erro de rede ao abrir o app: a sessão continua salva, só não deu para falar com o servidor. */
-export class SemConexao extends Error {}
+export { SemConexao };
 const ESGOTOU = Symbol('tempo esgotado');
 
 /**
@@ -46,13 +48,31 @@ export function armazenamentoDaSessao() {
  * Perfil: { nome, papel: 'balança'|'portaria'|'admin' }
  */
 
-function validarNovo({ placa, lacre }) {
-  const p = normalizarPlaca(placa);
-  if (!placaValida(p)) throw new Error('Placa inválida. Use ABC1234 ou ABC1D23.');
-  const l = String(lacre || '').trim();
-  if (!l) throw new Error('Informe o lacre.');
-  if (l.length > 40) throw new Error('Lacre muito longo (máximo 40 caracteres).');
-  return { placa: p, lacre: l };
+/**
+ * Interface das duas implementações abaixo (a camada offline, src/offline.js, fica por cima):
+ *  sessao(), emailSalvo(), entrar(), sair(), aoMudarSessao(cb), perfil(),
+ *  listar({status, desde, ate}), finalizadosDesde(desde), buscarPorIdCliente(id),
+ *  criar(dados, {idCliente, quando}), registrarSaida(id, lacre, {quando}),
+ *  cancelar(id, motivo, {quando}), assinar(cb), usuarios.{listar,criar,alterar,senha,excluir}.
+ * idCliente/quando: id gerado no aparelho e hora real da operação feita sem rede.
+ */
+
+/** fetch que desiste em 15 s (sem isso, rede ruim deixa a tela esperando para sempre). */
+function fetchComLimite(entrada, opcoes = {}) {
+  const ctrl = new AbortController();
+  const original = opcoes.signal;
+  if (original) {
+    if (original.aborted) ctrl.abort();
+    else original.addEventListener('abort', () => ctrl.abort(), { once: true });
+  }
+  let esgotou = false;
+  const t = setTimeout(() => { esgotou = true; ctrl.abort(); }, 15000);
+  return fetch(entrada, { ...opcoes, signal: ctrl.signal })
+    .catch((e) => {
+      if (esgotou) throw new TypeError('Failed to fetch (tempo esgotado)');
+      throw e;
+    })
+    .finally(() => clearTimeout(t));
 }
 
 // ---------------------------------------------------------------- Supabase
@@ -67,17 +87,32 @@ function criarApiSupabase() {
       detectSessionInUrl: false,
       storage: armazenamento,
     },
+    global: { fetch: fetchComLimite },
   });
 
-  /** Há sessão gravada neste aparelho (mesmo com o token vencido)? */
-  const temSessaoSalva = async () => {
+  /** Sessão gravada neste aparelho (mesmo com o token vencido), ou null. */
+  const sessaoSalva = async () => {
     try {
       const guardada = armazenamento
         ? await armazenamento.getItem(sb.auth.storageKey)
         : localStorage.getItem(sb.auth.storageKey);
-      return !!guardada;
-    } catch { return false; }
+      return guardada ? JSON.parse(guardada) : null;
+    } catch { return null; }
   };
+  const temSessaoSalva = async () => !!(await sessaoSalva());
+  const apagarSessaoSalva = async () => {
+    try {
+      if (armazenamento) await armazenamento.removeItem(sb.auth.storageKey);
+      else localStorage.removeItem(sb.auth.storageKey);
+    } catch { /* ok */ }
+  };
+
+  // Banco ainda sem as colunas/parâmetros do modo offline (schema.sql antigo): o app
+  // continua funcionando, só sem guardar a hora real nem o id do aparelho.
+  let esquemaSemIdCliente = false;
+  let esquemaSemQuando = false;
+  const faltaColuna = (e) => !!e && (e.code === 'PGRST204' || e.code === '42703');
+  const faltaFuncao = (e) => !!e && (e.code === 'PGRST202' || /Could not find the function/i.test(e.message || ''));
 
   // Sem internet o supabase-js fica re-tentando renovar o token por bem mais de 45 s
   // (medido). Depois deste limite o app desiste de esperar e mostra "Sem conexão".
@@ -103,7 +138,7 @@ function criarApiSupabase() {
     const m = error.message || String(error);
     if (/Invalid login credentials/i.test(m)) return new Error('E-mail ou senha incorretos.');
     if (/saidas_placa_pendente/i.test(m)) return new Error('Esta placa já está aguardando saída.');
-    if (/Failed to fetch|NetworkError/i.test(m)) return new Error('Sem conexão com o servidor.');
+    if (ehErroDeRede(error)) return new SemConexao('Sem conexão com o servidor.');
     return new Error(m);
   };
   const ok = ({ data, error }) => {
@@ -125,13 +160,19 @@ function criarApiSupabase() {
       if (error && isAuthRetryableFetchError(error)) throw new SemConexao('Sem conexão com o servidor.');
       return null;
     },
+    /** E-mail da sessão gravada (funciona sem rede), ou null. */
+    async emailSalvo() {
+      return (await sessaoSalva())?.user?.email ?? null;
+    },
     async entrar(email, senha) {
       ok(await sb.auth.signInWithPassword({ email: email.trim(), password: senha }));
     },
     async sair() {
       // scope 'local': sai só deste aparelho. O padrão ('global') derrubaria o mesmo login
       // em todos os aparelhos (ex.: sair no PC deslogaria o celular).
-      await sb.auth.signOut({ scope: 'local' });
+      // Sem rede o signOut tenta avisar o servidor, falha e não apaga nada: apaga à mão.
+      const r = await comLimite(sb.auth.signOut({ scope: 'local' }));
+      if (r === ESGOTOU || r?.error) await apagarSessaoSalva();
     },
     /** cb(evento) quando o login muda; 'SIGNED_OUT' inclui sessão revogada no servidor. */
     aoMudarSessao(cb) {
@@ -162,16 +203,47 @@ function criarApiSupabase() {
         .or(`saida_em.gte."${desde}",cancelado_em.gte."${desde}"`)
         .order('criado_em', { ascending: false }).limit(500));
     },
-    async criar(dados) {
+    /** Cadastro feito com este id do aparelho (para não duplicar no reenvio), ou null. */
+    async buscarPorIdCliente(idCliente) {
+      if (esquemaSemIdCliente) return null;
+      const { data, error } = await sb.from('saidas').select('*').eq('id_cliente', idCliente).maybeSingle();
+      if (error) {
+        const e = traduzir(error);
+        if (e instanceof SemConexao) throw e;
+        return null;
+      }
+      return data;
+    },
+    async criar(dados, { idCliente = null, quando = null } = {}) {
       const { placa, lacre } = validarNovo(dados);
       const observacao = String(dados.observacao || '').trim() || null;
-      return ok(await sb.from('saidas').insert({ placa, lacre, observacao }).select().single());
+      const basico = { placa, lacre, observacao };
+      if (idCliente && !esquemaSemIdCliente) {
+        const r = await sb.from('saidas')
+          .insert({ ...basico, id_cliente: idCliente, ...(quando ? { criado_em: quando } : {}) })
+          .select().single();
+        if (!faltaColuna(r.error)) return ok(r);
+        esquemaSemIdCliente = true;
+      }
+      return ok(await sb.from('saidas').insert(basico).select().single());
     },
-    async registrarSaida(id, lacreConferido) {
-      return ok(await sb.rpc('registrar_saida', { p_id: id, p_lacre: lacreConferido }));
+    async registrarSaida(id, lacreConferido, { quando = null } = {}) {
+      const args = { p_id: id, p_lacre: lacreConferido };
+      if (quando && !esquemaSemQuando) {
+        const r = await sb.rpc('registrar_saida', { ...args, p_quando: quando });
+        if (!faltaFuncao(r.error)) return ok(r);
+        esquemaSemQuando = true;
+      }
+      return ok(await sb.rpc('registrar_saida', args));
     },
-    async cancelar(id, motivo) {
-      return ok(await sb.rpc('cancelar_saida', { p_id: id, p_motivo: motivo || null }));
+    async cancelar(id, motivo, { quando = null } = {}) {
+      const args = { p_id: id, p_motivo: validarMotivo(motivo) };
+      if (quando && !esquemaSemQuando) {
+        const r = await sb.rpc('cancelar_saida', { ...args, p_quando: quando });
+        if (!faltaFuncao(r.error)) return ok(r);
+        esquemaSemQuando = true;
+      }
+      return ok(await sb.rpc('cancelar_saida', args));
     },
     /** Chama cb a cada mudança na tabela (Realtime). Devolve função para parar. */
     assinar(cb) {
@@ -218,6 +290,23 @@ function criarApiDemo() {
   ];
   const ouvintes = new Set();
   const ouvintesSessao = new Set();
+  // Só no modo dev: window.__semRede = true (ou sessionStorage "__semRede" = "1", que vale
+  // também ao recarregar a página) simula a falta de internet, para testar o modo offline.
+  const rede = () => {
+    if (!import.meta.env.DEV) return;
+    let semRede = !!window.__semRede;
+    try { semRede = semRede || sessionStorage.getItem('__semRede') === '1'; } catch { /* ok */ }
+    if (semRede) throw new SemConexao('Sem conexão com o servidor.');
+  };
+  // Hora vinda do aparelho: entre 7 dias atrás e agora (mesma regra do schema.sql).
+  const limitarHora = (quando, minimo = null) => {
+    const agora = Date.now();
+    let t = quando ? new Date(quando).getTime() : agora;
+    if (!Number.isFinite(t) || t > agora + 5 * 60000 || t < agora - 7 * 86400000) t = agora;
+    t = Math.min(t, agora);
+    if (minimo) t = Math.max(t, new Date(minimo).getTime());
+    return new Date(t).toISOString();
+  };
 
   const novo = () => ({ seq: 0, saidas: [], email: null });
   const ler = () => {
@@ -262,8 +351,14 @@ function criarApiDemo() {
 
   return {
     demo: true,
-    async sessao() { const e = ler().email; return e ? { email: e } : null; },
+    async sessao() {
+      const e = ler().email;
+      if (e) rede(); // como no Supabase: sessão salva + sem rede = SemConexao
+      return e ? { email: e } : null;
+    },
+    async emailSalvo() { return ler().email; },
     async entrar(email, senha) {
+      rede();
       const e = email.trim().toLowerCase();
       const db = ler();
       const u = db.usuarios.find((x) => x.email === e);
@@ -275,56 +370,74 @@ function criarApiDemo() {
     },
     async sair() { const db = ler(); db.email = null; gravar(db); ouvintesSessao.forEach((f) => f()); },
     aoMudarSessao(cb) { ouvintesSessao.add(cb); },
-    async perfil() { return usuario(); },
+    async perfil() { rede(); return usuario(); },
     async listar({ status = null, desde = null, ate = null } = {}) {
+      rede();
       return ler().saidas
         .filter((s) => (!status || s.status === status)
           && (!desde || s.criado_em >= desde) && (!ate || s.criado_em < ate))
         .sort((a, b) => b.criado_em.localeCompare(a.criado_em));
     },
     async finalizadosDesde(desde) {
+      rede();
       return ler().saidas
         .filter((s) => (s.saida_em && s.saida_em >= desde) || (s.cancelado_em && s.cancelado_em >= desde))
         .sort((a, b) => b.criado_em.localeCompare(a.criado_em));
     },
-    async criar(dados) {
+    async buscarPorIdCliente(idCliente) {
+      rede();
+      return ler().saidas.find((s) => s.id_cliente === idCliente) || null;
+    },
+    async criar(dados, { idCliente = null, quando = null } = {}) {
+      rede();
       const u = exigir('balança');
       const { placa, lacre } = validarNovo(dados);
       const db = ler();
+      const ja = idCliente && db.saidas.find((s) => s.id_cliente === idCliente);
+      if (ja) return ja; // reenvio do mesmo cadastro
       if (db.saidas.some((s) => s.placa === placa && s.status === 'pendente')) {
         throw new Error('Esta placa já está aguardando saída.');
       }
       const novo = {
-        id: ++db.seq, placa, lacre, observacao: String(dados.observacao || '').trim() || null,
-        status: 'pendente', criado_em: new Date().toISOString(), criado_por_nome: u.nome,
+        id: ++db.seq, id_cliente: idCliente, placa, lacre,
+        observacao: String(dados.observacao || '').trim() || null,
+        status: 'pendente', criado_em: limitarHora(quando), criado_por_nome: u.nome,
         saida_em: null, saida_por_nome: null, cancelado_em: null, cancelado_por_nome: null,
         motivo_cancelamento: null,
       };
       db.saidas.push(novo); gravar(db);
       return novo;
     },
-    async registrarSaida(id, lacreConferido) {
+    async registrarSaida(id, lacreConferido, { quando = null } = {}) {
+      rede();
       const u = exigir('portaria');
       const db = ler();
-      const s = db.saidas.find((x) => x.id === id);
+      const s = db.saidas.find((x) => String(x.id) === String(id));
       if (!s) throw new Error('Registro não encontrado.');
+      if (s.status === 'liberado' && s.saida_por_email === db.email) return s; // reenvio
       if (s.status !== 'pendente') throw new Error('Este veículo não está mais aguardando saída.');
       if (normalizarLacre(s.lacre) !== normalizarLacre(lacreConferido)) {
         throw new Error('Lacre não confere. Confira o lacre ou chame a balança.');
       }
-      Object.assign(s, { status: 'liberado', saida_em: new Date().toISOString(), saida_por_nome: u.nome });
+      Object.assign(s, {
+        status: 'liberado', saida_em: limitarHora(quando, s.criado_em), saida_por_nome: u.nome,
+        saida_por_email: db.email,
+      });
       gravar(db);
       return s;
     },
-    async cancelar(id, motivo) {
+    async cancelar(id, motivo, { quando = null } = {}) {
+      rede();
       const u = exigir('balança');
       const db = ler();
-      const s = db.saidas.find((x) => x.id === id);
+      const s = db.saidas.find((x) => String(x.id) === String(id));
       if (!s) throw new Error('Registro não encontrado.');
+      if (s.status === 'cancelado' && s.cancelado_por_email === db.email) return s; // reenvio
       if (s.status !== 'pendente') throw new Error('Só dá para cancelar o que ainda aguarda saída.');
+      const m = validarMotivo(motivo);
       Object.assign(s, {
-        status: 'cancelado', cancelado_em: new Date().toISOString(),
-        cancelado_por_nome: u.nome, motivo_cancelamento: motivo || null,
+        status: 'cancelado', cancelado_em: limitarHora(quando, s.criado_em),
+        cancelado_por_nome: u.nome, cancelado_por_email: db.email, motivo_cancelamento: m,
       });
       gravar(db);
       return s;
@@ -378,4 +491,4 @@ function criarApiDemo() {
   };
 }
 
-export const api = MODO_DEMO ? criarApiDemo() : criarApiSupabase();
+export const api = criarCamadaOffline(MODO_DEMO ? criarApiDemo() : criarApiSupabase());
