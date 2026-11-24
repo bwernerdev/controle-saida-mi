@@ -146,14 +146,27 @@ drop policy if exists saidas_cadastrar on public.saidas;
 create policy saidas_cadastrar on public.saidas for insert to authenticated
   with check (public.meu_papel() in ('escritorio', 'admin'));
 
+-- Acesso pela API dado explicitamente: funciona com ou sem a opção "Grant API access
+-- to new tables automatically" do projeto (o recomendado é deixá-la desligada).
 -- Sem políticas de update/delete: alterações só pelas funções acima.
+grant usage on schema public to authenticated;
 revoke all on public.saidas from anon;
 revoke all on public.perfis from anon;
-revoke update, delete on public.saidas from authenticated;
+revoke update, delete, truncate on public.saidas from authenticated;
+revoke insert, update, delete, truncate on public.perfis from authenticated;
+grant select, insert on public.saidas to authenticated;
+grant select on public.perfis to authenticated;
+
 revoke execute on function public.registrar_saida(bigint, text) from public, anon;
 revoke execute on function public.cancelar_saida(bigint, text) from public, anon;
+revoke execute on function public.meu_papel() from public, anon;
+revoke execute on function public.meu_nome() from public, anon;
+revoke execute on function public.saidas_antes_de_inserir() from public, anon;
 grant execute on function public.registrar_saida(bigint, text) to authenticated;
 grant execute on function public.cancelar_saida(bigint, text) to authenticated;
+grant execute on function public.meu_papel() to authenticated;
+grant execute on function public.meu_nome() to authenticated;
+grant execute on function public.normalizar_lacre(text) to authenticated;
 
 -- ------------------------------------------------------------------ tempo real
 -- A tela do escritório e a da portaria atualizam sozinhas quando algo muda.
