@@ -47,8 +47,9 @@ jobs:
           java-version: 21
           cache: gradle
 
-      - name: Configurar Android SDK
-        uses: android-actions/setup-android@v3
+      # Sem android-actions/setup-android: o ubuntu-latest já traz o Android SDK
+      # (ANDROID_HOME) com licenças aceitas, e a v3 da action quebra pedindo o
+      # pacote "tools", que não existe mais. O Gradle baixa o que faltar.
 
       - name: Instalar dependências
         run: npm ci
