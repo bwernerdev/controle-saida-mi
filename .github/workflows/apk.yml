@@ -68,7 +68,8 @@ jobs:
           if [ -z "$KEYSTORE_B64" ]; then
             echo "::error::Falta o segredo ANDROID_KEYSTORE_B64 (ver CLAUDE.md)."; exit 1
           fi
-          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/assinatura.p12"
+          # tr: segredo gravado pelo PowerShell pode vir com \r\n no fim.
+          printf '%s' "$KEYSTORE_B64" | tr -d '\r\n ' | base64 -d > "$RUNNER_TEMP/assinatura.p12"
           echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/assinatura.p12" >> "$GITHUB_ENV"
 
       - name: Compilar APK (release assinado)
