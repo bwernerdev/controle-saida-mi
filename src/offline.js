@@ -454,6 +454,23 @@ export function criarCamadaOffline(base) {
       });
     },
 
+    /** Só com internet: apaga no servidor e limpa a cópia local do mesmo jeito. */
+    async apagarHistorico(opcoes = {}) {
+      await pronto;
+      let n;
+      try {
+        n = await viaRede(() => base.apagarHistorico(opcoes));
+      } catch (e) {
+        if (ehErroDeRede(e)) throw new Error('Sem internet: apagar o histórico precisa de conexão.');
+        throw e;
+      }
+      estado.finalizados = [];
+      if (opcoes.incluirPendentes) estado.pendentes = [];
+      await gravar();
+      notificarDados();
+      return n;
+    },
+
     /** cb a cada mudança (servidor em tempo real ou fila local). Devolve função para parar. */
     assinar(cb) {
       ouvintesDados.add(cb);

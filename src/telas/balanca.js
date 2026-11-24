@@ -6,7 +6,7 @@ import {
 
 const ROTULO = { pendente: 'Aguardando saída', liberado: 'Saiu', cancelado: 'Cancelado' };
 
-export function telaBalanca(corpo) {
+export function telaBalanca(corpo, perfil = {}) {
   corpo.className = 'balanca';
   corpo.innerHTML = `
     <section class="cartao cadastro">
@@ -43,6 +43,8 @@ export function telaBalanca(corpo) {
           <div class="ferramentas">
             <input type="search" id="busca" placeholder="Buscar placa ou lacre" spellcheck="false">
             <input type="date" id="dia" value="${hojeISO()}" hidden title="Dia do cadastro">
+            ${perfil.pode_apagar_historico
+    ? '<button class="btn-link perigo" id="apagar-historico" type="button">Apagar histórico</button>' : ''}
           </div>
         </div>
         <div class="tabela-rolagem">
@@ -66,6 +68,23 @@ export function telaBalanca(corpo) {
         <div class="acoes">
           <button class="btn sec" value="nao" formnovalidate>Voltar</button>
           <button class="btn perigo" value="sim">Cancelar saída</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="dlg-apagar" class="cartao">
+      <form method="dialog">
+        <h3>Apagar histórico?</h3>
+        <p>Apaga do sistema todas as saídas já liberadas e canceladas, no site e no app.
+          <b>Não tem volta.</b> Os logins continuam.</p>
+        <label class="linha-check"><input type="checkbox" name="pendentes">
+          Apagar também os que estão aguardando saída</label>
+        <label>Para confirmar, digite <b>APAGAR</b>
+          <input name="confirmacao" autocomplete="off" spellcheck="false" autocapitalize="characters"></label>
+        <p class="erro" id="erro-apagar" hidden></p>
+        <div class="acoes">
+          <button class="btn sec" value="nao" formnovalidate>Voltar</button>
+          <button class="btn perigo" value="sim">Apagar histórico</button>
         </div>
       </form>
     </dialog>`;
@@ -202,6 +221,41 @@ export function telaBalanca(corpo) {
       } catch (e) { aviso(e.message, 'erro'); }
     };
     dlg.showModal();
+  }
+
+  // Só aparece para login com perfis.pode_apagar_historico (ligado por SQL, ver schema.sql).
+  const botaoApagar = $('#apagar-historico');
+  if (botaoApagar) {
+    const dlgA = $('#dlg-apagar');
+    const formA = dlgA.querySelector('form');
+    const erroA = $('#erro-apagar');
+    botaoApagar.onclick = () => {
+      formA.reset();
+      erroA.hidden = true;
+      dlgA.showModal();
+      formA.confirmacao.focus();
+    };
+    formA.onsubmit = async (ev) => {
+      if (ev.submitter?.value !== 'sim') return;
+      ev.preventDefault(); // fecha só depois de apagar (erro fica visível no diálogo)
+      if (formA.confirmacao.value.trim().toUpperCase() !== 'APAGAR') {
+        erroA.textContent = 'Digite APAGAR para confirmar.'; erroA.hidden = false;
+        formA.confirmacao.focus();
+        return;
+      }
+      const botao = ev.submitter;
+      botao.disabled = true; erroA.hidden = true;
+      try {
+        const n = await api.apagarHistorico({ incluirPendentes: formA.pendentes.checked });
+        dlgA.close();
+        aviso(n === 1 ? '1 registro apagado.' : `${n} registros apagados.`);
+        carregar();
+      } catch (e) {
+        erroA.textContent = e.message; erroA.hidden = false;
+      } finally {
+        botao.disabled = false;
+      }
+    };
   }
 
   // Atualiza sozinho quando a portaria libera (Realtime) e a cada 60 s como garantia.

@@ -25,6 +25,10 @@ update public.perfis set papel = 'balança' where papel = 'escritorio';
 alter table public.perfis add constraint perfis_papel_check
   check (papel in ('balança', 'portaria', 'admin'));
 
+-- Quem pode apagar o histórico pelo app (botão "Apagar histórico" na tela da Balança).
+-- Só se liga por SQL, login a login: nem a aba Usuários nem o papel admin dão isso.
+alter table public.perfis add column if not exists pode_apagar_historico boolean not null default false;
+
 create table if not exists public.saidas (
   id                  bigint generated always as identity primary key,
   placa               text not null check (placa ~ '^[A-Z]{3}[0-9][A-Z0-9][0-9]{2}$'),
@@ -178,6 +182,22 @@ begin
   return r;
 end $$;
 
+-- Apaga o histórico (liberados e cancelados; com p_incluir_pendentes, também os que
+-- aguardam saída). Só para login com perfis.pode_apagar_historico = true. Não tem volta.
+-- delete (e não truncate) para as telas abertas receberem a mudança em tempo real.
+create or replace function public.apagar_historico(p_incluir_pendentes boolean default false)
+returns integer language plpgsql security definer set search_path = public as $$
+declare
+  n integer;
+begin
+  if not coalesce((select pode_apagar_historico from public.perfis where id = auth.uid()), false) then
+    raise exception 'Seu usuário não tem permissão para apagar o histórico.';
+  end if;
+  delete from public.saidas where coalesce(p_incluir_pendentes, false) or status <> 'pendente';
+  get diagnostics n = row_count;
+  return n;
+end $$;
+
 -- ------------------------------------------------------------------ permissões (RLS)
 alter table public.perfis enable row level security;
 alter table public.saidas enable row level security;
@@ -213,12 +233,14 @@ grant select on public.saidas to service_role;
 revoke execute on function public.registrar_saida(bigint, text, timestamptz) from public, anon;
 revoke execute on function public.cancelar_saida(bigint, text, timestamptz) from public, anon;
 revoke execute on function public.hora_do_aparelho(timestamptz, timestamptz) from public, anon;
+revoke execute on function public.apagar_historico(boolean) from public, anon;
 revoke execute on function public.meu_papel() from public, anon;
 revoke execute on function public.meu_nome() from public, anon;
 revoke execute on function public.saidas_antes_de_inserir() from public, anon;
 grant execute on function public.registrar_saida(bigint, text, timestamptz) to authenticated;
 grant execute on function public.cancelar_saida(bigint, text, timestamptz) to authenticated;
 grant execute on function public.hora_do_aparelho(timestamptz, timestamptz) to authenticated;
+grant execute on function public.apagar_historico(boolean) to authenticated;
 grant execute on function public.meu_papel() to authenticated;
 grant execute on function public.meu_nome() to authenticated;
 grant execute on function public.normalizar_lacre(text) to authenticated;

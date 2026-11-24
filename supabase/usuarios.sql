@@ -13,3 +13,9 @@ on conflict (id) do update set nome = excluded.nome, papel = excluded.papel;
 
 -- Tirar o acesso (o login continua existindo, mas não vê nada):
 -- delete from public.perfis where id = (select id from auth.users where email = 'pessoa@empresa.com.br');
+
+-- Botão "Apagar histórico" (tela da Balança): só aparece para quem tiver a permissão.
+-- Ligar (true) ou desligar (false) para um login:
+-- update public.perfis set pode_apagar_historico = true
+--  where id = (select id from auth.users where email = 'pessoa@empresa.com.br');
+-- Conferir quem pode: select nome from public.perfis where pode_apagar_historico;

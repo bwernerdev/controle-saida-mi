@@ -186,8 +186,11 @@ function criarApiSupabase() {
       if (ru.error && isAuthRetryableFetchError(ru.error)) throw new SemConexao('Sem conexão com o servidor.');
       const u = ru.data;
       if (!u?.user) return null;
-      const data = ok(await sb.from('perfis').select('nome, papel').eq('id', u.user.id).maybeSingle());
-      return data;
+      // select('*'): pega pode_apagar_historico quando o banco já tem a coluna, sem quebrar antes.
+      const data = ok(await sb.from('perfis').select('*').eq('id', u.user.id).maybeSingle());
+      return data && {
+        nome: data.nome, papel: data.papel, pode_apagar_historico: !!data.pode_apagar_historico,
+      };
     },
     /** status: 'pendente' | null (todos); desde: ISO para filtrar por criado_em. */
     async listar({ status = null, desde = null, ate = null } = {}) {
@@ -245,6 +248,10 @@ function criarApiSupabase() {
       }
       return ok(await sb.rpc('cancelar_saida', args));
     },
+    /** Apaga o histórico (só login com pode_apagar_historico). Devolve quantos apagou. */
+    async apagarHistorico({ incluirPendentes = false } = {}) {
+      return ok(await sb.rpc('apagar_historico', { p_incluir_pendentes: !!incluirPendentes }));
+    },
     /** Chama cb a cada mudança na tabela (Realtime). Devolve função para parar. */
     assinar(cb) {
       const canal = sb.channel('saidas-mudancas')
@@ -286,7 +293,7 @@ function criarApiDemo() {
   const FIXOS = [
     { id: 'demo-balanca', email: 'balanca@demo', nome: 'Balança (demo)', papel: 'balança' },
     { id: 'demo-portaria', email: 'portaria@demo', nome: 'Portaria (demo)', papel: 'portaria' },
-    { id: 'demo-admin', email: 'admin@demo', nome: 'Admin (demo)', papel: 'admin' },
+    { id: 'demo-admin', email: 'admin@demo', nome: 'Admin (demo)', papel: 'admin', pode_apagar_historico: true },
   ];
   const ouvintes = new Set();
   const ouvintesSessao = new Set();
@@ -328,7 +335,10 @@ function criarApiDemo() {
   const usuario = () => {
     const db = ler();
     const u = db.usuarios.find((x) => x.email === db.email);
-    return u && u.papel ? { nome: u.nome, papel: u.papel } : null;
+    // admin@demo pode apagar o histórico (usuários demo gravados antes disso também).
+    return u && u.papel
+      ? { nome: u.nome, papel: u.papel, pode_apagar_historico: !!u.pode_apagar_historico || u.id === 'demo-admin' }
+      : null;
   };
   const exigirAdmin = () => {
     const db = ler();
@@ -441,6 +451,15 @@ function criarApiDemo() {
       });
       gravar(db);
       return s;
+    },
+    async apagarHistorico({ incluirPendentes = false } = {}) {
+      rede();
+      if (!usuario()?.pode_apagar_historico) throw new Error('Seu usuário não tem permissão para apagar o histórico.');
+      const db = ler();
+      const antes = db.saidas.length;
+      db.saidas = db.saidas.filter((s) => !incluirPendentes && s.status === 'pendente');
+      gravar(db);
+      return antes - db.saidas.length;
     },
     assinar(cb) { ouvintes.add(cb); return () => ouvintes.delete(cb); },
     usuarios: {
