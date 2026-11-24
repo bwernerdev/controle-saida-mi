@@ -77,7 +77,9 @@ export function criarTratador(criarAdmin: () => Cliente) {
       if (erroQuem || !quem?.user) throw new Falha(401, 'Sessão expirada. Faça login de novo.');
       const eu = quem.user.id;
 
-      const { data: meuPerfil } = await admin.from('perfis').select('papel').eq('id', eu).maybeSingle();
+      const { data: meuPerfil, error: erroPerfil } = await admin.from('perfis').select('papel').eq('id', eu).maybeSingle();
+      // Falha de leitura não é "não é admin": mostra o erro real (ex.: falta de grant ao service_role).
+      if (erroPerfil) throw new Falha(500, `Não foi possível ler os perfis: ${erroPerfil.message}`);
       if (meuPerfil?.papel !== 'admin') throw new Falha(403, 'Só o administrador pode gerenciar usuários.');
 
       let corpo: Record<string, unknown> = {};

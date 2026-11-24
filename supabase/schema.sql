@@ -163,6 +163,11 @@ revoke update, delete, truncate on public.saidas from authenticated;
 revoke insert, update, delete, truncate on public.perfis from authenticated;
 grant select, insert on public.saidas to authenticated;
 grant select on public.perfis to authenticated;
+-- service_role = chave secreta, usada só pela Edge Function "usuarios" (aba Usuários).
+-- Ignora RLS, mas sem estes grants nem consegue ler perfis (projetos sem grant automático).
+grant usage on schema public to service_role;
+grant select, insert, update, delete on public.perfis to service_role;
+grant select on public.saidas to service_role;
 
 revoke execute on function public.registrar_saida(bigint, text) from public, anon;
 revoke execute on function public.cancelar_saida(bigint, text) from public, anon;
