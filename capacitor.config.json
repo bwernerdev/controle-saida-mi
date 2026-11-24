@@ -1,0 +1,8 @@
+{
+  "appId": "com.bwernerdev.controlesaidami",
+  "appName": "Controle de Saída - MI",
+  "webDir": "dist",
+  "android": {
+    "allowMixedContent": false
+  }
+}

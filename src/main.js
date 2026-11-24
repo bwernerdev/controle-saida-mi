@@ -1,0 +1,95 @@
+// Entrada do app: decide entre login, tela do escritório e tela da portaria.
+import './style.css';
+import { api } from './api.js';
+import { telaLogin } from './telas/login.js';
+import { telaEscritorio } from './telas/escritorio.js';
+import { telaPortaria } from './telas/portaria.js';
+import { ehApp, esc } from './util.js';
+
+const raiz = document.getElementById('app');
+let desmontar = null;
+
+const NOME_PAPEL = { escritorio: 'Escritório', portaria: 'Portaria', admin: 'Administrador' };
+
+function limpar() {
+  if (desmontar) { desmontar(); desmontar = null; }
+  raiz.innerHTML = '';
+}
+
+/** Admin escolhe a visão; guarda a última escolha neste aparelho. */
+function visaoInicial(papel) {
+  if (papel !== 'admin') return papel;
+  try {
+    const salva = localStorage.getItem('csmi-visao');
+    if (salva === 'escritorio' || salva === 'portaria') return salva;
+  } catch { /* sem storage */ }
+  return ehApp() ? 'portaria' : 'escritorio';
+}
+
+async function iniciar() {
+  limpar();
+  raiz.innerHTML = '<div class="carregando">Carregando…</div>';
+  let sessao = null;
+  try { sessao = await api.sessao(); } catch { /* trata como deslogado */ }
+  if (!sessao) {
+    limpar();
+    telaLogin(raiz, iniciar);
+    return;
+  }
+
+  let perfil = null;
+  try { perfil = await api.perfil(); } catch (e) {
+    limpar();
+    raiz.innerHTML = `<div class="centro"><div class="cartao msg">
+      <h2>Não foi possível carregar seu perfil</h2><p>${esc(e.message)}</p>
+      <button class="btn" id="tentar">Tentar de novo</button> <button class="btn sec" id="sair">Sair</button></div></div>`;
+    raiz.querySelector('#tentar').onclick = iniciar;
+    raiz.querySelector('#sair').onclick = async () => { await api.sair(); iniciar(); };
+    return;
+  }
+  if (!perfil) {
+    limpar();
+    raiz.innerHTML = `<div class="centro"><div class="cartao msg">
+      <h2>Usuário sem acesso</h2>
+      <p>Seu login existe, mas ainda não tem perfil (Escritório ou Portaria). Peça ao administrador para liberar.</p>
+      <button class="btn sec" id="sair">Sair</button></div></div>`;
+    raiz.querySelector('#sair').onclick = async () => { await api.sair(); iniciar(); };
+    return;
+  }
+
+  montar(perfil, visaoInicial(perfil.papel));
+}
+
+function montar(perfil, visao) {
+  limpar();
+  const topo = document.createElement('header');
+  topo.className = 'topo';
+  const abas = perfil.papel === 'admin'
+    ? `<nav class="abas">
+         <button data-v="escritorio" class="${visao === 'escritorio' ? 'ativa' : ''}">Escritório</button>
+         <button data-v="portaria" class="${visao === 'portaria' ? 'ativa' : ''}">Portaria</button>
+       </nav>`
+    : '';
+  topo.innerHTML = `
+    <div class="marca"><img src="./icone.svg" alt="" width="28" height="28"><span>Controle de Saída - MI</span>
+      ${api.demo ? '<span class="selo-demo" title="Dados só neste navegador">demonstração</span>' : ''}</div>
+    ${abas}
+    <div class="usuario"><span>${esc(perfil.nome)} · ${NOME_PAPEL[perfil.papel] || perfil.papel}</span>
+      <button class="btn-link" id="sair">Sair</button></div>`;
+  raiz.appendChild(topo);
+  topo.querySelector('#sair').onclick = async () => { await api.sair(); iniciar(); };
+  topo.querySelectorAll('.abas button').forEach((b) => {
+    b.onclick = () => {
+      try { localStorage.setItem('csmi-visao', b.dataset.v); } catch { /* ok */ }
+      montar(perfil, b.dataset.v);
+    };
+  });
+
+  const corpo = document.createElement('main');
+  raiz.appendChild(corpo);
+  document.body.dataset.visao = visao;
+  desmontar = visao === 'portaria' ? telaPortaria(corpo, perfil) : telaEscritorio(corpo, perfil);
+}
+
+api.aoMudarSessao(() => { /* login/logout em outra aba */ });
+iniciar();

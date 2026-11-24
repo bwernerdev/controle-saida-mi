@@ -1,0 +1,24 @@
+{
+  "name": "controle-saida-mi",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Controle de Saída - MI: escritório cadastra placa + lacre no PC, portaria libera a saída pelo celular (APK).",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "android:sync": "vite build && cap sync android",
+    "android:apk": "vite build && cap sync android && cd android && gradlew assembleDebug"
+  },
+  "dependencies": {
+    "@capacitor/core": "^8.6.2",
+    "@supabase/supabase-js": "^2.119.2"
+  },
+  "devDependencies": {
+    "@capacitor/android": "^8.6.2",
+    "@capacitor/assets": "^4.0.0",
+    "@capacitor/cli": "^8.6.2",
+    "vite": "^8.3.8"
+  }
+}

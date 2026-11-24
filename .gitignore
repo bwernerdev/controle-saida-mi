@@ -1,0 +1,20 @@
+node_modules/
+dist/
+*.apk
+*.aab
+.env
+.env.*
+!.env.example
+
+# Android (gerado pelo Gradle / Android Studio)
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/.idea/
+android/captures/
+*.keystore
+*.jks
+*.p12
+# Chave de assinatura do APK e a senha dela: nunca no Git (backup fora daqui).
+assinatura/
