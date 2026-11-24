@@ -1,15 +1,15 @@
-// Entrada do app: decide entre login, tela do escritório e tela da portaria.
+// Entrada do app: decide entre login, tela da balança e tela da portaria.
 import './style.css';
 import { api } from './api.js';
 import { telaLogin } from './telas/login.js';
-import { telaEscritorio } from './telas/escritorio.js';
+import { telaBalanca } from './telas/balanca.js';
 import { telaPortaria } from './telas/portaria.js';
 import { ehApp, esc } from './util.js';
 
 const raiz = document.getElementById('app');
 let desmontar = null;
 
-const NOME_PAPEL = { escritorio: 'Escritório', portaria: 'Portaria', admin: 'Administrador' };
+const NOME_PAPEL = { balança: 'Balança', portaria: 'Portaria', admin: 'Administrador' };
 
 function limpar() {
   if (desmontar) { desmontar(); desmontar = null; }
@@ -21,9 +21,9 @@ function visaoInicial(papel) {
   if (papel !== 'admin') return papel;
   try {
     const salva = localStorage.getItem('csmi-visao');
-    if (salva === 'escritorio' || salva === 'portaria') return salva;
+    if (salva === 'balança' || salva === 'portaria') return salva;
   } catch { /* sem storage */ }
-  return ehApp() ? 'portaria' : 'escritorio';
+  return ehApp() ? 'portaria' : 'balança';
 }
 
 async function iniciar() {
@@ -51,7 +51,7 @@ async function iniciar() {
     limpar();
     raiz.innerHTML = `<div class="centro"><div class="cartao msg">
       <h2>Usuário sem acesso</h2>
-      <p>Seu login existe, mas ainda não tem perfil (Escritório ou Portaria). Peça ao administrador para liberar.</p>
+      <p>Seu login existe, mas ainda não tem perfil (Balança ou Portaria). Peça ao administrador para liberar.</p>
       <button class="btn sec" id="sair">Sair</button></div></div>`;
     raiz.querySelector('#sair').onclick = async () => { await api.sair(); iniciar(); };
     return;
@@ -66,7 +66,7 @@ function montar(perfil, visao) {
   topo.className = 'topo';
   const abas = perfil.papel === 'admin'
     ? `<nav class="abas">
-         <button data-v="escritorio" class="${visao === 'escritorio' ? 'ativa' : ''}">Escritório</button>
+         <button data-v="balança" class="${visao === 'balança' ? 'ativa' : ''}">Balança</button>
          <button data-v="portaria" class="${visao === 'portaria' ? 'ativa' : ''}">Portaria</button>
        </nav>`
     : '';
@@ -88,7 +88,7 @@ function montar(perfil, visao) {
   const corpo = document.createElement('main');
   raiz.appendChild(corpo);
   document.body.dataset.visao = visao;
-  desmontar = visao === 'portaria' ? telaPortaria(corpo, perfil) : telaEscritorio(corpo, perfil);
+  desmontar = visao === 'portaria' ? telaPortaria(corpo, perfil) : telaBalanca(corpo, perfil);
 }
 
 api.aoMudarSessao(() => { /* login/logout em outra aba */ });

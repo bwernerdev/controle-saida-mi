@@ -1,6 +1,6 @@
 # Controle de Saída - MI
 
-Painel de controle de saída de veículos. O escritório cadastra **placa + lacre** no PC; a portaria confirma a saída no celular (APK Android), digitando o lacre que está no veículo.
+Painel de controle de saída de veículos. A balança cadastra **placa + lacre** no PC; a portaria confirma a saída no celular (APK Android), digitando o lacre que está no veículo.
 
 - Painel web: https://bwernerdev.github.io/controle-saida-mi/
 - APK: página de Releases do repositório (arquivo `Controle-de-Saida-MI-<versão>.apk`).

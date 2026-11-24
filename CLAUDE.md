@@ -1,13 +1,13 @@
 # controle-saida-mi — mapa rápido
 
-**Controle de Saída - MI.** O escritório cadastra no PC a saída de um veículo (PLACA + LACRE, observação opcional). A portaria abre o APK no celular, vê a fila "Aguardando saída", digita o lacre que está no veículo e confirma. O sistema só libera se o lacre digitado for o cadastrado (comparação sem espaços e sem diferença de maiúsculas). Uso interno da equipe, com login.
+**Controle de Saída - MI.** A balança cadastra no PC a saída de um veículo (PLACA + LACRE, observação opcional). A portaria abre o APK no celular, vê a fila "Aguardando saída", digita o lacre que está no veículo e confirma. O sistema só libera se o lacre digitado for o cadastrado (comparação sem espaços e sem diferença de maiúsculas). Uso interno da equipe, com login.
 
 Um código só para os dois: app web (Vite, JavaScript puro, sem framework) empacotado para Android com Capacitor 8. Dados e login no Supabase.
 
 ## Pastas
 | Pasta | Conteúdo |
 |---|---|
-| `src/` | App web: `main.js` (decide login/escritório/portaria), `api.js` (dados: Supabase ou demonstração), `config.js`, `util.js`, `style.css`, `telas/` |
+| `src/` | App web: `main.js` (decide login/balança/portaria), `api.js` (dados: Supabase ou demonstração), `config.js`, `util.js`, `style.css`, `telas/` |
 | `supabase/` | `schema.sql` (tabelas, funções, RLS, realtime) e `usuarios.sql` (dar acesso a alguém) |
 | `android/` | Projeto Android gerado pelo Capacitor (`npx cap add android`), com assinatura fixa em `app/build.gradle` |
 | `public/` | Arquivos copiados como estão para o build (`icone.svg`) |
@@ -16,15 +16,15 @@ Um código só para os dois: app web (Vite, JavaScript puro, sem framework) empa
 | `assinatura/` | **Fora do Git.** Chave do APK (`controle-saida-mi.p12`) e a senha (`senha.txt`). Perder isso impede atualizar o app instalado |
 
 ## Papéis (tabela `perfis`)
-- `escritorio`: cadastra e cancela saídas pendentes. Tela de PC.
+- `balança`: cadastra e cancela saídas pendentes. Tela de PC.
 - `portaria`: vê pendentes e registra a saída. Tela de celular.
-- `admin`: as duas telas, com abas no topo. No APK abre na Portaria; no PC, no Escritório.
+- `admin`: as duas telas, com abas no topo. No APK abre na Portaria; no PC, na Balança.
 - Login sem linha em `perfis` não vê nada ("Usuário sem acesso").
 
-Status de uma saída: `pendente` → `liberado` (portaria) ou `cancelado` (escritório). Ninguém altera a tabela direto: só `insert` (escritório, e o gatilho preenche autor e status) e as funções `registrar_saida` e `cancelar_saida`. Mesma placa não pode ter duas pendentes.
+Status de uma saída: `pendente` → `liberado` (portaria) ou `cancelado` (balança). Ninguém altera a tabela direto: só `insert` (balança, e o gatilho preenche autor e status) e as funções `registrar_saida` e `cancelar_saida`. Mesma placa não pode ter duas pendentes.
 
 ## Modo demonstração
-Sem `VITE_SUPABASE_URL`/`VITE_SUPABASE_ANON_KEY` no build, o app usa `localStorage` (selo amarelo "demonstração" no topo). Usuários `escritorio@demo`, `portaria@demo`, `admin@demo`, qualquer senha. Serve para testar a interface; dados ficam só naquele navegador.
+Sem `VITE_SUPABASE_URL`/`VITE_SUPABASE_ANON_KEY` no build, o app usa `localStorage` (selo amarelo "demonstração" no topo). Usuários `balanca@demo`, `portaria@demo`, `admin@demo`, qualquer senha. Serve para testar a interface; dados ficam só naquele navegador.
 
 ## Comandos
 - `npm install` (se o cache do npm der EEXIST/EBADF nesta máquina, usar `--cache` numa pasta nova).
@@ -48,7 +48,7 @@ Sem `VITE_SUPABASE_URL`/`VITE_SUPABASE_ANON_KEY` no build, o app usa `localStora
 
 ## Convenções
 - Textos da interface e do código em português do Brasil. Sem framework de UI. Cores por tokens CSS em `:root`, só tema claro.
-- Escritório pensado para PC (abaixo de 900 px vira uma coluna). Portaria pensada para celular (lista de cards, folha que sobe de baixo).
+- Balança pensado para PC (abaixo de 900 px vira uma coluna). Portaria pensada para celular (lista de cards, folha que sobe de baixo).
 - O lacre cadastrado não aparece para a portaria: ela digita o que vê no veículo.
 - Regras de lacre e placa existem duas vezes (app em `util.js`/`api.js` e banco em `schema.sql`); mudar nos dois.
 - `schema.sql` pode ser rodado de novo sem perder dados (create if not exists / create or replace).

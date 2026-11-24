@@ -1,6 +1,6 @@
 -- Dar acesso a um usuário depois de criá-lo em Authentication > Users > "Add user"
 -- (marcar "Auto Confirm User"). Trocar e-mail, nome e papel e rodar no SQL Editor.
--- Papéis: 'escritorio', 'portaria' ou 'admin'.
+-- Papéis: 'balança', 'portaria' ou 'admin'.
 
 insert into public.perfis (id, nome, papel)
 select id, 'Nome da pessoa', 'portaria'

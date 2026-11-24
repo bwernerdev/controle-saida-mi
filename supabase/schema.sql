@@ -2,21 +2,28 @@
 -- Rodar inteiro no SQL Editor do projeto Supabase. Pode rodar de novo sem perder dados.
 --
 -- Papéis (tabela perfis):
---   escritorio -> cadastra placa + lacre e cancela pendentes (PC)
+--   balança -> cadastra placa + lacre e cancela pendentes (PC)
 --   portaria   -> vê pendentes e registra a saída conferindo o lacre (APK)
 --   admin      -> as duas coisas
 -- Usuário logado sem linha em "perfis" não vê nada.
 --
--- Nenhum usuário altera "saidas" diretamente: só insere (escritório) e usa as funções
+-- Nenhum usuário altera "saidas" diretamente: só insere (balança) e usa as funções
 -- registrar_saida / cancelar_saida, que conferem papel, status e lacre.
 
 -- ------------------------------------------------------------------ tabelas
 create table if not exists public.perfis (
   id         uuid primary key references auth.users (id) on delete cascade,
   nome       text not null,
-  papel      text not null check (papel in ('escritorio', 'portaria', 'admin')),
+  papel      text not null check (papel in ('balança', 'portaria', 'admin')),
   criado_em  timestamptz not null default now()
 );
+
+-- Migração (24/11/2026): o papel "escritorio" passou a se chamar "balança".
+-- Refaz a regra de papéis e converte quem já tinha o nome antigo.
+alter table public.perfis drop constraint if exists perfis_papel_check;
+update public.perfis set papel = 'balança' where papel = 'escritorio';
+alter table public.perfis add constraint perfis_papel_check
+  check (papel in ('balança', 'portaria', 'admin'));
 
 create table if not exists public.saidas (
   id                  bigint generated always as identity primary key,
@@ -97,7 +104,7 @@ begin
     raise exception 'Este veículo não está mais aguardando saída.';
   end if;
   if public.normalizar_lacre(r.lacre) <> public.normalizar_lacre(p_lacre) then
-    raise exception 'Lacre não confere. Confira o lacre ou chame o escritório.';
+    raise exception 'Lacre não confere. Confira o lacre ou chame a balança.';
   end if;
   update public.saidas
      set status = 'liberado', saida_em = now(), saida_por = auth.uid(), saida_por_nome = public.meu_nome()
@@ -106,13 +113,13 @@ begin
   return r;
 end $$;
 
--- Escritório cancela uma saída que ainda não aconteceu.
+-- Balança cancela uma saída que ainda não aconteceu.
 create or replace function public.cancelar_saida(p_id bigint, p_motivo text default null)
 returns public.saidas language plpgsql security definer set search_path = public as $$
 declare
   r public.saidas;
 begin
-  if public.meu_papel() not in ('escritorio', 'admin') or public.meu_papel() is null then
+  if public.meu_papel() not in ('balança', 'admin') or public.meu_papel() is null then
     raise exception 'Seu usuário não tem permissão para cancelar.';
   end if;
   select * into r from public.saidas where id = p_id for update;
@@ -144,7 +151,7 @@ create policy saidas_ler on public.saidas for select to authenticated
 
 drop policy if exists saidas_cadastrar on public.saidas;
 create policy saidas_cadastrar on public.saidas for insert to authenticated
-  with check (public.meu_papel() in ('escritorio', 'admin'));
+  with check (public.meu_papel() in ('balança', 'admin'));
 
 -- Acesso pela API dado explicitamente: funciona com ou sem a opção "Grant API access
 -- to new tables automatically" do projeto (o recomendado é deixá-la desligada).
@@ -169,7 +176,7 @@ grant execute on function public.meu_nome() to authenticated;
 grant execute on function public.normalizar_lacre(text) to authenticated;
 
 -- ------------------------------------------------------------------ tempo real
--- A tela do escritório e a da portaria atualizam sozinhas quando algo muda.
+-- A tela da balança e a da portaria atualizam sozinhas quando algo muda.
 do $$
 begin
   alter publication supabase_realtime add table public.saidas;

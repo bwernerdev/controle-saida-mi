@@ -8,7 +8,7 @@ export function telaLogin(raiz, aoEntrar) {
       <form class="cartao" id="form-login" autocomplete="on">
         <div class="login-marca"><img src="./icone.svg" alt="" width="48" height="48">
           <h1>Controle de Saída - MI</h1></div>
-        ${api.demo ? `<p class="dica">Modo demonstração: use <b>escritorio@demo</b>, <b>portaria@demo</b>
+        ${api.demo ? `<p class="dica">Modo demonstração: use <b>balanca@demo</b>, <b>portaria@demo</b>
           ou <b>admin@demo</b>, com qualquer senha.</p>` : ''}
         <label>E-mail<input name="email" type="email" required autocomplete="username" inputmode="email"></label>
         <label>Senha<input name="senha" type="password" ${api.demo ? '' : 'required'} autocomplete="current-password"></label>

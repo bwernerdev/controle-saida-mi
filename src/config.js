@@ -6,7 +6,7 @@
 // VITE_SUPABASE_ANON_KEY), que é como o GitHub Actions faz.
 //
 // Com os dois valores vazios, o app roda em MODO DEMONSTRAÇÃO: dados só neste navegador
-// (localStorage), usuários escritorio@demo e portaria@demo, qualquer senha.
+// (localStorage), usuários balanca@demo e portaria@demo, qualquer senha.
 export const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
 export const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 

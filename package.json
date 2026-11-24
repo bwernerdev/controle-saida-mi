@@ -2,7 +2,7 @@
   "name": "controle-saida-mi",
   "version": "1.0.0",
   "private": true,
-  "description": "Controle de Saída - MI: escritório cadastra placa + lacre no PC, portaria libera a saída pelo celular (APK).",
+  "description": "Controle de Saída - MI: balança cadastra placa + lacre no PC, portaria libera a saída pelo celular (APK).",
   "type": "module",
   "scripts": {
     "dev": "vite",

@@ -11,7 +11,7 @@ import { normalizarLacre, normalizarPlaca, placaValida } from './util.js';
  * { id, placa, lacre, observacao, status: 'pendente'|'liberado'|'cancelado',
  *   criado_em, criado_por_nome, saida_em, saida_por_nome,
  *   cancelado_em, cancelado_por_nome, motivo_cancelamento }
- * Perfil: { nome, papel: 'escritorio'|'portaria'|'admin' }
+ * Perfil: { nome, papel: 'balança'|'portaria'|'admin' }
  */
 
 function validarNovo({ placa, lacre }) {
@@ -104,7 +104,7 @@ function criarApiSupabase() {
 function criarApiDemo() {
   const CHAVE = 'csmi-demo-v1';
   const USUARIOS = {
-    'escritorio@demo': { nome: 'Escritório (demo)', papel: 'escritorio' },
+    'balanca@demo': { nome: 'Balança (demo)', papel: 'balança' },
     'portaria@demo': { nome: 'Portaria (demo)', papel: 'portaria' },
     'admin@demo': { nome: 'Admin (demo)', papel: 'admin' },
   };
@@ -135,7 +135,7 @@ function criarApiDemo() {
     async sessao() { const e = ler().email; return e ? { email: e } : null; },
     async entrar(email) {
       const e = email.trim().toLowerCase();
-      if (!USUARIOS[e]) throw new Error('No modo demonstração use escritorio@demo, portaria@demo ou admin@demo.');
+      if (!USUARIOS[e]) throw new Error('No modo demonstração use balanca@demo, portaria@demo ou admin@demo.');
       const db = ler(); db.email = e; gravar(db);
       ouvintesSessao.forEach((f) => f());
     },
@@ -154,7 +154,7 @@ function criarApiDemo() {
         .sort((a, b) => b.criado_em.localeCompare(a.criado_em));
     },
     async criar(dados) {
-      const u = exigir('escritorio');
+      const u = exigir('balança');
       const { placa, lacre } = validarNovo(dados);
       const db = ler();
       if (db.saidas.some((s) => s.placa === placa && s.status === 'pendente')) {
@@ -176,14 +176,14 @@ function criarApiDemo() {
       if (!s) throw new Error('Registro não encontrado.');
       if (s.status !== 'pendente') throw new Error('Este veículo não está mais aguardando saída.');
       if (normalizarLacre(s.lacre) !== normalizarLacre(lacreConferido)) {
-        throw new Error('Lacre não confere. Confira o lacre ou chame o escritório.');
+        throw new Error('Lacre não confere. Confira o lacre ou chame a balança.');
       }
       Object.assign(s, { status: 'liberado', saida_em: new Date().toISOString(), saida_por_nome: u.nome });
       gravar(db);
       return s;
     },
     async cancelar(id, motivo) {
-      const u = exigir('escritorio');
+      const u = exigir('balança');
       const db = ler();
       const s = db.saidas.find((x) => x.id === id);
       if (!s) throw new Error('Registro não encontrado.');

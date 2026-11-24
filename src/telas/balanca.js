@@ -1,4 +1,4 @@
-// Tela do escritório (PC): cadastra PLACA + LACRE e acompanha as saídas.
+// Tela da balança (PC): cadastra PLACA + LACRE e acompanha as saídas.
 import { api } from '../api.js';
 import {
   aviso, dataHora, esc, formatarPlaca, hojeISO, inicioDoDia, normalizarPlaca, placaValida,
@@ -6,8 +6,8 @@ import {
 
 const ROTULO = { pendente: 'Aguardando saída', liberado: 'Saiu', cancelado: 'Cancelado' };
 
-export function telaEscritorio(corpo) {
-  corpo.className = 'escritorio';
+export function telaBalanca(corpo) {
+  corpo.className = 'balanca';
   corpo.innerHTML = `
     <section class="cartao cadastro">
       <h2>Nova saída</h2>
