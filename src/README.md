@@ -3,7 +3,7 @@
 | Arquivo | Conteúdo |
 |---|---|
 | `main.js` | Entrada: sessão → perfil → tela. Monta o topo (nome, papel, Sair e, para admin, abas Balança/Portaria/Usuários) |
-| `api.js` | Camada de dados com a mesma interface em duas versões: Supabase (produção) e demonstração (`localStorage`). As telas só usam este módulo |
+| `api.js` | Camada de dados com a mesma interface em duas versões: Supabase (produção) e demonstração (`localStorage`). As telas só usam este módulo. Também guarda a sessão de login (nativo no APK) e lança `SemConexao` quando há sessão salva mas não há rede |
 | `atualizador.js` | Só no APK: confere a última Release do GitHub e, se houver versão nova, baixa e abre o instalador (plugin nativo `Atualizador`) |
 | `config.js` | URL e chave anon do Supabase (por `VITE_SUPABASE_URL`/`VITE_SUPABASE_ANON_KEY`). Vazio = modo demonstração |
 | `util.js` | Placa (normalizar, validar, formatar), lacre (normalizar), datas, escape de HTML, aviso flutuante, `ehApp()` |

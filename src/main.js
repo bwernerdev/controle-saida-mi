@@ -1,6 +1,6 @@
 // Entrada do app: decide entre login, tela da balança e tela da portaria.
 import './style.css';
-import { api } from './api.js';
+import { api, SemConexao } from './api.js';
 import { telaLogin } from './telas/login.js';
 import { telaBalanca } from './telas/balanca.js';
 import { telaPortaria } from './telas/portaria.js';
@@ -28,25 +28,58 @@ function visaoInicial(papel) {
   return ehApp() ? 'portaria' : 'balança';
 }
 
+let naTelaDeLogin = false;
+let saidaPeloBotao = false;
+let tentarDeNovo = null;
+
+/** Sessão salva, mas sem internet: não pede login; tenta de novo sozinho quando a rede volta. */
+function telaSemConexao() {
+  limpar();
+  raiz.innerHTML = `<div class="centro"><div class="cartao msg">
+    <h2>Sem conexão</h2>
+    <p>Seu login continua salvo. Assim que a internet voltar, o app abre sozinho.</p>
+    <button class="btn" id="tentar">Tentar agora</button></div></div>`;
+  raiz.querySelector('#tentar').onclick = iniciar;
+  if (!tentarDeNovo) {
+    tentarDeNovo = () => { window.removeEventListener('online', tentarDeNovo); tentarDeNovo = null; iniciar(); };
+    window.addEventListener('online', tentarDeNovo);
+  }
+}
+
+/** Botão Sair: encerra a sessão só neste aparelho e volta ao login. */
+async function sair() {
+  saidaPeloBotao = true; // o evento SIGNED_OUT que vem junto não precisa reiniciar
+  await api.sair();
+  iniciar();
+}
+
+const ehSemConexao = (e) => e instanceof SemConexao || /Sem conexão/i.test(e?.message || '');
+
 async function iniciar() {
   limpar();
+  naTelaDeLogin = false;
   raiz.innerHTML = '<div class="carregando">Carregando…</div>';
   let sessao = null;
-  try { sessao = await api.sessao(); } catch { /* trata como deslogado */ }
+  try { sessao = await api.sessao(); } catch (e) {
+    if (ehSemConexao(e)) { telaSemConexao(); return; }
+    /* outro erro: trata como deslogado */
+  }
   if (!sessao) {
     limpar();
+    naTelaDeLogin = true;
     telaLogin(raiz, iniciar);
     return;
   }
 
   let perfil = null;
   try { perfil = await api.perfil(); } catch (e) {
+    if (ehSemConexao(e)) { telaSemConexao(); return; }
     limpar();
     raiz.innerHTML = `<div class="centro"><div class="cartao msg">
       <h2>Não foi possível carregar seu perfil</h2><p>${esc(e.message)}</p>
       <button class="btn" id="tentar">Tentar de novo</button> <button class="btn sec" id="sair">Sair</button></div></div>`;
     raiz.querySelector('#tentar').onclick = iniciar;
-    raiz.querySelector('#sair').onclick = async () => { await api.sair(); iniciar(); };
+    raiz.querySelector('#sair').onclick = sair;
     return;
   }
   if (!perfil) {
@@ -55,7 +88,7 @@ async function iniciar() {
       <h2>Usuário sem acesso</h2>
       <p>Seu login existe, mas ainda não tem perfil (Balança ou Portaria). Peça ao administrador para liberar.</p>
       <button class="btn sec" id="sair">Sair</button></div></div>`;
-    raiz.querySelector('#sair').onclick = async () => { await api.sair(); iniciar(); };
+    raiz.querySelector('#sair').onclick = sair;
     return;
   }
 
@@ -80,7 +113,7 @@ function montar(perfil, visao) {
     <div class="usuario"><span>${esc(perfil.nome)} · ${NOME_PAPEL[perfil.papel] || perfil.papel}</span>
       <button class="btn-link" id="sair">Sair</button></div>`;
   raiz.appendChild(topo);
-  topo.querySelector('#sair').onclick = async () => { await api.sair(); iniciar(); };
+  topo.querySelector('#sair').onclick = sair;
   topo.querySelectorAll('.abas button').forEach((b) => {
     b.onclick = () => {
       try { localStorage.setItem('csmi-visao', b.dataset.v); } catch { /* ok */ }
@@ -95,6 +128,12 @@ function montar(perfil, visao) {
   desmontar = (telas[visao] || telaBalanca)(corpo, perfil);
 }
 
-api.aoMudarSessao(() => { /* login/logout em outra aba */ });
+// Sessão encerrada fora do botão Sair (revogada no servidor, usuário excluído): volta ao login.
+api.aoMudarSessao((evento) => {
+  if (evento !== 'SIGNED_OUT') return;
+  if (saidaPeloBotao) { saidaPeloBotao = false; return; }
+  if (!naTelaDeLogin) iniciar();
+});
 iniciar();
 iniciarAtualizador(); // só faz algo no APK
+if (import.meta.env.DEV) window.__iniciar = iniciar; // testes no preview; some no build

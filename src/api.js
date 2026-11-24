@@ -2,9 +2,41 @@
 // Duas implementações com a mesma interface:
 //  - Supabase (produção): login, tabela "saidas" e funções registrar_saida / cancelar_saida.
 //  - Demonstração: localStorage, para testar sem Supabase configurado.
-import { createClient } from '@supabase/supabase-js';
+import { createClient, isAuthRetryableFetchError } from '@supabase/supabase-js';
+import { Preferences } from '@capacitor/preferences';
 import { SUPABASE_URL, SUPABASE_ANON_KEY, MODO_DEMO } from './config.js';
-import { normalizarLacre, normalizarPlaca, placaValida } from './util.js';
+import { ehApp, normalizarLacre, normalizarPlaca, placaValida } from './util.js';
+
+/** Erro de rede ao abrir o app: a sessão continua salva, só não deu para falar com o servidor. */
+export class SemConexao extends Error {}
+const ESGOTOU = Symbol('tempo esgotado');
+
+/**
+ * Onde a sessão de login fica guardada.
+ * No APK: armazenamento nativo do app (SharedPreferences, via @capacitor/preferences), que
+ * só some se a pessoa sair, limpar os dados do app ou desinstalar. O localStorage do WebView
+ * pode ser limpo pelo Android; por isso não é usado lá. Na primeira abertura depois desta
+ * mudança, copia a sessão que estava no localStorage para não deslogar ninguém.
+ * No navegador (PC): localStorage, como antes.
+ */
+export function armazenamentoDaSessao() {
+  if (!ehApp()) return undefined; // padrão do supabase-js (localStorage)
+  return {
+    async getItem(chave) {
+      const { value } = await Preferences.get({ key: chave });
+      if (value !== null) return value;
+      let antigo = null;
+      try { antigo = localStorage.getItem(chave); } catch { /* sem storage */ }
+      if (antigo !== null) {
+        await Preferences.set({ key: chave, value: antigo });
+        try { localStorage.removeItem(chave); } catch { /* ok */ }
+      }
+      return antigo;
+    },
+    async setItem(chave, valor) { await Preferences.set({ key: chave, value: valor }); },
+    async removeItem(chave) { await Preferences.remove({ key: chave }); },
+  };
+}
 
 /**
  * Registro de saída (mesmos nomes das colunas do banco):
@@ -25,9 +57,46 @@ function validarNovo({ placa, lacre }) {
 
 // ---------------------------------------------------------------- Supabase
 function criarApiSupabase() {
+  // A sessão fica salva até a pessoa tocar em "Sair": o token de acesso (1 h) é renovado
+  // sozinho pelo refresh token, que no Supabase não expira (sem limite de sessão configurado).
+  const armazenamento = armazenamentoDaSessao();
   const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false },
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: false,
+      storage: armazenamento,
+    },
   });
+
+  /** Há sessão gravada neste aparelho (mesmo com o token vencido)? */
+  const temSessaoSalva = async () => {
+    try {
+      const guardada = armazenamento
+        ? await armazenamento.getItem(sb.auth.storageKey)
+        : localStorage.getItem(sb.auth.storageKey);
+      return !!guardada;
+    } catch { return false; }
+  };
+
+  // Sem internet o supabase-js fica re-tentando renovar o token por bem mais de 45 s
+  // (medido). Depois deste limite o app desiste de esperar e mostra "Sem conexão".
+  const LIMITE_MS = 8000;
+  const comLimite = (promessa) => Promise.race([
+    promessa,
+    new Promise((resolver) => { setTimeout(() => resolver(ESGOTOU), LIMITE_MS); }),
+  ]);
+
+  // No APK, renova o token só com o app na frente (recomendação do Supabase para apps
+  // móveis): ao voltar, renova na hora se tiver vencido em segundo plano.
+  if (ehApp()) {
+    const acompanhar = () => {
+      if (document.visibilityState === 'visible') sb.auth.startAutoRefresh();
+      else sb.auth.stopAutoRefresh();
+    };
+    document.addEventListener('visibilitychange', acompanhar);
+    acompanhar();
+  }
 
   const traduzir = (error) => {
     if (!error) return null;
@@ -45,22 +114,36 @@ function criarApiSupabase() {
   return {
     demo: false,
     async sessao() {
-      const { data } = await sb.auth.getSession();
-      return data.session ? { email: data.session.user.email } : null;
+      const r = await comLimite(sb.auth.getSession());
+      if (r === ESGOTOU) {
+        if (await temSessaoSalva()) throw new SemConexao('Sem conexão com o servidor.');
+        return null;
+      }
+      const { data, error } = r;
+      if (data.session) return { email: data.session.user.email };
+      // Token vencido e sem internet: a sessão segue salva; não é para pedir login.
+      if (error && isAuthRetryableFetchError(error)) throw new SemConexao('Sem conexão com o servidor.');
+      return null;
     },
     async entrar(email, senha) {
       ok(await sb.auth.signInWithPassword({ email: email.trim(), password: senha }));
     },
     async sair() {
-      await sb.auth.signOut();
+      // scope 'local': sai só deste aparelho. O padrão ('global') derrubaria o mesmo login
+      // em todos os aparelhos (ex.: sair no PC deslogaria o celular).
+      await sb.auth.signOut({ scope: 'local' });
     },
+    /** cb(evento) quando o login muda; 'SIGNED_OUT' inclui sessão revogada no servidor. */
     aoMudarSessao(cb) {
       sb.auth.onAuthStateChange((evento) => {
-        if (evento === 'SIGNED_OUT' || evento === 'SIGNED_IN') cb();
+        if (evento === 'SIGNED_OUT') setTimeout(() => cb(evento), 0);
       });
     },
     async perfil() {
-      const { data: u } = await sb.auth.getUser();
+      const ru = await comLimite(sb.auth.getUser());
+      if (ru === ESGOTOU) throw new SemConexao('Sem conexão com o servidor.');
+      if (ru.error && isAuthRetryableFetchError(ru.error)) throw new SemConexao('Sem conexão com o servidor.');
+      const u = ru.data;
       if (!u?.user) return null;
       const data = ok(await sb.from('perfis').select('nome, papel').eq('id', u.user.id).maybeSingle());
       return data;
