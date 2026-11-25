@@ -19,3 +19,4 @@ android/captures/
 *.p12
 # Chave de assinatura do APK e a senha dela: nunca no Git (backup fora daqui).
 assinatura/
+graphify-out/
