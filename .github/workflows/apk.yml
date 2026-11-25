@@ -54,6 +54,9 @@ jobs:
       - name: Instalar dependências
         run: npm ci
 
+      - name: Testar regras do banco (supabase/schema.sql)
+        run: npm test
+
       - name: Build web + copiar para o Android
         run: npm run build && npx cap sync android
         env:

@@ -11,7 +11,7 @@ Detalhes, configuração e comandos: [CLAUDE.md](CLAUDE.md).
 | Arquivo | Para que serve |
 |---|---|
 | `index.html` | Página única do app (carrega `src/main.js`) |
-| `package.json` | Dependências e scripts (`dev`, `build`, `android:sync`) |
+| `package.json` | Dependências e scripts (`dev`, `build`, `test`, `android:sync`) |
 | `vite.config.js` | Build com caminho relativo (serve Pages e APK), porta 5190 |
 | `capacitor.config.json` | Nome e id do app Android (`com.bwernerdev.controlesaidami`) |
 | `.env.example` | Modelo do `.env` com URL e chave do Supabase |

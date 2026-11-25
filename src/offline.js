@@ -103,8 +103,9 @@ export function criarCamadaOffline(base) {
     online = valor;
     emitirEstado();
     if (valor) {
-      // A rede voltou: o canal de tempo real pode ter caído junto; refaz e envia a fila.
-      if (pararBase) { pararBase(); pararBase = base.assinar(notificarDados); }
+      // A rede voltou: envia a fila. O canal de tempo real não é refeito aqui: o cliente
+      // do Supabase volta ao canal sozinho quando o socket reconecta, e sair e assinar de
+      // novo na hora pegava o mesmo canal ainda saindo, que depois era removido.
       sincronizar();
       notificarDados();
     }
@@ -340,8 +341,7 @@ export function criarCamadaOffline(base) {
       }
     } catch (e) {
       if (!ehErroDeRede(e)) throw e;
-      linhas = []; // a cópia local entra pelo mesclar
-      return mesclar([...estado.pendentes, ...estado.finalizados].map((r) => r), filtro);
+      return mesclar([...estado.pendentes, ...estado.finalizados], filtro);
     }
     return mesclar(linhas, filtro);
   };

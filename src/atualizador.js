@@ -125,7 +125,7 @@ async function baixar(rel, instalada) {
   }
 }
 
-function pedirPermissao(rel, instalada) {
+function pedirPermissao(rel) {
   const d = abrirDialogo(`
     <h3>Nova versão ${esc(rel.nome)}</h3>
     <p>Para o app se atualizar sozinho, o Android precisa de uma liberação (só uma vez):
@@ -140,7 +140,6 @@ function pedirPermissao(rel, instalada) {
     // Ao voltar para o app, a verificação roda de novo (forçada) e segue para o download.
     ultimaVerificacao = 0;
   };
-  void instalada;
 }
 
 /** Resultado da última verificação automática (mostrado no "Verificar atualização"). */
@@ -158,7 +157,7 @@ async function verificar({ forcar = false } = {}) {
   const rel = await ultimaRelease();
   if (!rel || rel.codigo <= Number(instalada.versionCode)) return 'em-dia';
   if (!instalada.podeInstalar) {
-    pedirPermissao(rel, instalada);
+    pedirPermissao(rel);
     return 'permissao';
   }
   baixar(rel, instalada);

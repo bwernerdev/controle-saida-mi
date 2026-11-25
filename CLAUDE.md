@@ -9,6 +9,7 @@ Um código só para os dois: app web (Vite, JavaScript puro, sem framework) empa
 |---|---|
 | `src/` | App web: `main.js` (decide login/balança/portaria), `api.js` (dados: Supabase ou demonstração), `config.js`, `util.js`, `style.css`, `telas/` |
 | `supabase/` | `schema.sql` (tabelas, funções, RLS, realtime), `usuarios.sql` (dar acesso por SQL) e `functions/usuarios/` (Edge Function da aba Usuários) |
+| `tests/` | `sql.test.mjs`: regras do banco (`schema.sql`) num Postgres em memória (PGlite). Roda com `npm test` e nos dois workflows antes do build |
 | `android/` | Projeto Android gerado pelo Capacitor (`npx cap add android`), com assinatura fixa em `app/build.gradle` |
 | `public/` | Arquivos copiados como estão para o build (`icone.svg`) |
 | `assets/` | Fontes do ícone e do splash do Android e o script que os gera |
@@ -51,6 +52,7 @@ Sem `VITE_SUPABASE_URL`/`VITE_SUPABASE_ANON_KEY` no build, o app usa `localStora
 - `npm run dev`: servidor em http://localhost:5190 (no app Claude: preview `controle-saida-mi` do `launch.json` da raiz). Usa o `.env`, ou seja, o Supabase de verdade.
 - `npm run dev:demo`: http://localhost:5191 em modo demonstração (`.env.demo`), para testar sem mexer nos dados reais.
 - `npm run build`: gera `dist/`.
+- `npm test`: testa as regras do banco (cadastro, saída, cancelamento, reenvio offline, apagar histórico, anônimo). Mudou o `schema.sql`, rode antes do commit.
 - `npx cap sync android`: copia `dist/` para o projeto Android (depois de cada build).
 - APK: compilado pelo GitHub Actions (`apk.yml`), porque esta máquina não tem JDK nem Android SDK. Cada push em `main` que mexa no app gera a Release `v1.0.<run>` com `Controle-de-Saida-MI-1.0.<run>.apk`. Manual: Actions > "Gerar APK Android" > Run workflow.
 - Ícones do Android: `node assets/gerar-icones.cjs && npx capacitor-assets generate --android`.
