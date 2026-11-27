@@ -3,7 +3,7 @@
 // número que vê no veículo e o sistema compara.
 import { api } from '../api.js';
 import {
-  aviso, dataHora, esc, formatarPlaca, hojeISO, inicioDoDia, normalizarPlaca,
+  aviso, dataHora, esc, formatarPlaca, hojeISO, inicioDoDia, normalizarLacre, normalizarPlaca,
 } from '../util.js';
 
 export function telaPortaria(corpo) {
@@ -24,6 +24,7 @@ export function telaPortaria(corpo) {
         <p class="rotulo">Registrar saída</p>
         <div class="placa grande" id="saida-placa"></div>
         <p class="obs" id="saida-obs"></p>
+        <p class="obs" id="saida-vazio" hidden><b>Lacre: VAZIO</b> — só confirmar a saída.</p>
         <label>Número do lacre no veículo
           <input name="lacre" required maxlength="40" autocapitalize="characters" spellcheck="false"
                  inputmode="text" placeholder="Digite o lacre que está no veículo">
@@ -95,10 +96,14 @@ export function telaPortaria(corpo) {
     atual = r;
     $('#saida-placa').textContent = formatarPlaca(r.placa);
     $('#saida-obs').textContent = r.observacao || '';
-    form.lacre.value = '';
+    // Cadastro com flag VAZIO: não pede o lacre, só confirmar a saída.
+    const vazio = normalizarLacre(r.lacre) === 'VAZIO';
+    form.lacre.value = vazio ? 'VAZIO' : '';
+    form.lacre.closest('label').hidden = vazio;
+    $('#saida-vazio').hidden = !vazio;
     erro.hidden = true;
     dlg.showModal();
-    form.lacre.focus();
+    if (!vazio) form.lacre.focus();
   }
   $('#voltar').onclick = () => dlg.close();
 

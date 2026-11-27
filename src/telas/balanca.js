@@ -19,6 +19,7 @@ export function telaBalanca(corpo, perfil = {}) {
         <label>Lacre
           <input name="lacre" required maxlength="40" placeholder="Número do lacre" spellcheck="false">
         </label>
+        <label class="linha-check"><input type="checkbox" id="lacre-vazio"> VAZIO</label>
         <label>Observação <small>(opcional)</small>
           <textarea name="observacao" rows="2" maxlength="200" placeholder="Motorista, destino, nota…"></textarea>
         </label>
@@ -101,6 +102,16 @@ export function telaBalanca(corpo, perfil = {}) {
     if (form.placa.value !== p) form.placa.value = p;
     form.placa.classList.toggle('invalida', p.length === 7 && !placaValida(p));
   });
+
+  // Flag VAZIO: grava o lacre "VAZIO" e trava o campo; a portaria só confirma a saída.
+  const vazio = $('#lacre-vazio');
+  const aplicarVazio = () => {
+    if (vazio.checked) form.lacre.value = 'VAZIO';
+    else if (form.lacre.readOnly) form.lacre.value = '';
+    form.lacre.readOnly = vazio.checked;
+  };
+  vazio.onchange = aplicarVazio;
+  form.addEventListener('reset', () => setTimeout(aplicarVazio));
 
   form.onsubmit = async (ev) => {
     ev.preventDefault();
