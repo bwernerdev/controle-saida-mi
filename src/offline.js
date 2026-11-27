@@ -351,6 +351,10 @@ export function criarCamadaOffline(base) {
     usuarios: base.usuarios, // aba Usuários: só online
     aoMudarSessao: (cb) => base.aoMudarSessao(cb),
     entrar: (email, senha) => base.entrar(email, senha),
+    async trocarSenha(senha) {
+      await base.trocarSenha(senha);
+      if (estado.perfil) { estado.perfil = { ...estado.perfil, trocar_senha: false }; await gravar(); }
+    },
 
     async sessao() {
       await pronto;

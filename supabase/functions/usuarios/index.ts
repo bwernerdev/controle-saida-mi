@@ -118,7 +118,7 @@ export function criarTratador(criarAdmin: () => Cliente) {
         const senha = validarSenha(corpo.senha);
 
         const { data: criado, error } = await admin.auth.admin.createUser({
-          email, password: senha, email_confirm: true, user_metadata: { nome },
+          email, password: senha, email_confirm: true, user_metadata: { nome, trocar_senha: true },
         });
         if (error || !criado?.user) throw new Falha(400, traduzirErroAuth(error?.message ?? 'Falha ao criar usuário.'));
 
@@ -154,7 +154,7 @@ export function criarTratador(criarAdmin: () => Cliente) {
         const id = texto(corpo.id);
         if (!id) throw new Falha(400, 'Usuário não informado.');
         const senha = validarSenha(corpo.senha);
-        const { error } = await admin.auth.admin.updateUserById(id, { password: senha });
+        const { error } = await admin.auth.admin.updateUserById(id, { password: senha, user_metadata: { trocar_senha: true } });
         if (error) throw new Falha(400, traduzirErroAuth(error.message));
         return responder(200, { ok: true });
       }

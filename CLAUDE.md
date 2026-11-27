@@ -34,6 +34,9 @@ Um código só: app web (Vite, JS puro) empacotado para Android com Capacitor 8.
 - Publicar: Supabase > Edge Functions > Deploy a new function > Via Editor, nome `usuarios`, colar o arquivo. Sem ela a aba mostra "A função "usuarios" ainda não foi publicada".
 - Teste: Node 24 roda o `.ts` com stub no lugar do import `npm:`.
 
+## Trocar senha
+- Botão "Trocar senha" no topo (`telas/senha.js`, `api.trocarSenha`). Senha nova de usuário criado ou redefinida pelo admin = expirada: marca `user_metadata.trocar_senha` (Edge Function), e o app força a tela logo após entrar. A troca limpa a marca. Só impede o app, não a API (uso interno). **Republicar a Edge Function.**
+
 ## Apagar histórico
 - Botão na Balança, só para `perfis.pode_apagar_historico = true`, ligado só por SQL (`usuarios.sql`); nem admin nem a aba Usuários dão. Hoje só no login do usuário (pedido de 24/11/2026).
 - Diálogo pede digitar APAGAR. Padrão apaga liberados e cancelados; a caixa "Apagar também os que estão aguardando saída" inclui pendentes. Função `apagar_historico(p_incluir_pendentes)`; precisa de internet. Na demonstração, `admin@demo` tem a permissão.
@@ -96,3 +99,5 @@ Sem `VITE_SUPABASE_URL`/`VITE_SUPABASE_ANON_KEY` no build, usa `localStorage` (s
 - Regras de lacre e placa existem duas vezes (app: `util.js`/`api.js`; banco: `schema.sql`): mudar nos dois.
 - `schema.sql` roda de novo sem perder dados (create if not exists / create or replace).
 - SQL verificado com PGlite simulando `auth.uid()` e os papéis do Supabase.
+
+- UI/frontend: sempre usar a skill `impeccable` (ler PRODUCT.md/DESIGN.md do projeto; criar se faltar).

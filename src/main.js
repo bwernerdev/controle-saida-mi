@@ -5,6 +5,7 @@ import { telaLogin } from './telas/login.js';
 import { telaBalanca } from './telas/balanca.js';
 import { telaPortaria } from './telas/portaria.js';
 import { telaUsuarios } from './telas/usuarios.js';
+import { telaTrocarSenha } from './telas/senha.js';
 import { dataHora, ehApp, esc } from './util.js';
 import { iniciarAtualizador, verificarAgora, versaoInstalada } from './atualizador.js';
 
@@ -95,7 +96,19 @@ async function iniciar() {
     return;
   }
 
+  if (perfil.trocar_senha) { trocarSenha(perfil, true); return; }
   montar(perfil, visaoInicial(perfil.papel));
+}
+
+/** Senha expirada (obrigatória, logo após entrar) ou troca voluntária pelo botão do topo. */
+function trocarSenha(perfil, obrigatoria) {
+  limpar();
+  telaTrocarSenha(raiz, {
+    obrigatoria,
+    aoConcluir: () => montar({ ...perfil, trocar_senha: false }, visaoInicial(perfil.papel)),
+    aoCancelar: () => montar(perfil, visaoInicial(perfil.papel)),
+    aoSair: sair,
+  });
 }
 
 function montar(perfil, visao) {
@@ -115,9 +128,11 @@ function montar(perfil, visao) {
     ${abas}
     <div class="usuario"><span>${esc(perfil.nome)} · ${NOME_PAPEL[perfil.papel] || perfil.papel}</span>
       <button class="btn-link versao-topo" id="versao" hidden title="Verificar atualização"></button>
+      <button class="btn-link" id="trocar-senha">Trocar senha</button>
       <button class="btn-link" id="sair">Sair</button></div>`;
   raiz.appendChild(topo);
   topo.querySelector('#sair').onclick = sair;
+  topo.querySelector('#trocar-senha').onclick = () => trocarSenha(perfil, false);
   // No APK: versão instalada; tocar confere na hora se há atualização.
   versaoInstalada().then((v) => {
     const b = topo.querySelector('#versao');

@@ -53,7 +53,7 @@ export function armazenamentoDaSessao() {
  *  sessao(), emailSalvo(), entrar(), sair(), aoMudarSessao(cb), perfil(),
  *  listar({status, desde, ate}), finalizadosDesde(desde), buscarPorIdCliente(id),
  *  criar(dados, {idCliente, quando}), registrarSaida(id, lacre, {quando}),
- *  cancelar(id, motivo, {quando}), assinar(cb), usuarios.{listar,criar,alterar,senha,excluir}.
+ *  cancelar(id, motivo, {quando}), assinar(cb), trocarSenha(nova), usuarios.{listar,criar,alterar,senha,excluir}.
  * idCliente/quando: id gerado no aparelho e hora real da operação feita sem rede.
  */
 
@@ -190,7 +190,12 @@ function criarApiSupabase() {
       const data = ok(await sb.from('perfis').select('*').eq('id', u.user.id).maybeSingle());
       return data && {
         nome: data.nome, papel: data.papel, pode_apagar_historico: !!data.pode_apagar_historico,
+        trocar_senha: !!u.user.user_metadata?.trocar_senha,
       };
+    },
+    /** O próprio usuário define a senha; tira a marca de senha expirada. */
+    async trocarSenha(senha) {
+      ok(await sb.auth.updateUser({ password: senha, data: { trocar_senha: false } }));
     },
     /** status: 'pendente' | null (todos); desde: ISO para filtrar por criado_em. */
     async listar({ status = null, desde = null, ate = null } = {}) {
@@ -337,7 +342,8 @@ function criarApiDemo() {
     const u = db.usuarios.find((x) => x.email === db.email);
     // admin@demo pode apagar o histórico (usuários demo gravados antes disso também).
     return u && u.papel
-      ? { nome: u.nome, papel: u.papel, pode_apagar_historico: !!u.pode_apagar_historico || u.id === 'demo-admin' }
+      ? { nome: u.nome, papel: u.papel, pode_apagar_historico: !!u.pode_apagar_historico || u.id === 'demo-admin',
+        trocar_senha: !!u.trocar_senha }
       : null;
   };
   const exigirAdmin = () => {
@@ -381,6 +387,14 @@ function criarApiDemo() {
     async sair() { const db = ler(); db.email = null; gravar(db); ouvintesSessao.forEach((f) => f()); },
     aoMudarSessao(cb) { ouvintesSessao.add(cb); },
     async perfil() { rede(); return usuario(); },
+    async trocarSenha(senha) {
+      rede();
+      const db = ler();
+      const u = db.usuarios.find((x) => x.email === db.email);
+      if (!u) throw new Error('Sessão expirada. Entre de novo.');
+      u.senha = validarSenha(senha); u.trocar_senha = false;
+      gravar(db);
+    },
     async listar({ status = null, desde = null, ate = null } = {}) {
       rede();
       return ler().saidas
@@ -478,7 +492,7 @@ function criarApiDemo() {
         validarSenha(senha);
         if (db.usuarios.some((u) => u.email === e)) throw new Error('Já existe um usuário com este e-mail.');
         db.usuarios.push({
-          id: `demo-${Date.now()}`, email: e, nome: nome.trim(), papel, senha,
+          id: `demo-${Date.now()}`, email: e, nome: nome.trim(), papel, senha, trocar_senha: true,
           criado_em: new Date().toISOString(), ultimo_acesso: null,
         });
         gravar(db);
@@ -497,7 +511,7 @@ function criarApiDemo() {
         const { db } = exigirAdmin();
         const u = db.usuarios.find((x) => x.id === id);
         if (!u) throw new Error('Usuário não encontrado.');
-        u.senha = validarSenha(senha);
+        u.senha = validarSenha(senha); u.trocar_senha = true;
         gravar(db);
       },
       async excluir({ id }) {
